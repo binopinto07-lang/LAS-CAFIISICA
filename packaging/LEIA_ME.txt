@@ -1,0 +1,6 @@
+LAS-CAFIISICA 0.1.0-dev
+
+Executar START_LAS_CAFIISICA.bat ou LAS_CAFIISICA\LAS_CAFIISICA.exe.
+
+Este marco abre LAS/LAZ, preserva a classificacao original apenas para diagnostico
+e mostra estatisticas reais. Ainda nao executa SMRF, CSF, PTD ou Fusion.
