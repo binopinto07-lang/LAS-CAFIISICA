@@ -11,7 +11,23 @@
   const status = (text) => {
     const el = document.getElementById("viewerStatus");
     if (el) el.textContent = text;
+    console.log("[LASViewer]", text);
   };
+
+  function getAttribute(pointcloud, name) {
+    try {
+      if (typeof pointcloud.getAttribute === "function") {
+        return pointcloud.getAttribute(name);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function rgbAttributeName(pointcloud) {
+    if (getAttribute(pointcloud, "rgba")) return "rgba";
+    if (getAttribute(pointcloud, "rgb")) return "rgb";
+    return null;
+  }
 
   function defineClassificationColors(viewer) {
     const definitions = {
@@ -76,15 +92,32 @@
   function configurePointcloud(pointcloud, classified) {
     const material = pointcloud.material;
     if (!material) return;
-    material.size = 1.1;
+
+    material.size = 1.4;
     material.minSize = 1;
-    material.maxSize = 12;
+    material.maxSize = 14;
     material.pointSizeType =
       Potree.PointSizeType.ATTENUATED;
     material.shape = Potree.PointShape.CIRCLE;
     material.opacity = 1.0;
-    material.activeAttributeName =
-      classified ? "classification" : "rgba";
+
+    const rgb = rgbAttributeName(pointcloud);
+    if (classified) {
+      material.activeAttributeName = "classification";
+    } else if (rgb) {
+      material.activeAttributeName = rgb;
+    } else {
+      material.activeAttributeName = "elevation";
+      state.materialMode = "elevation";
+    }
+
+    console.log("[LASViewer] cloud attributes", {
+      rgb: rgb,
+      classification: Boolean(
+        getAttribute(pointcloud, "classification")
+      ),
+      active: material.activeAttributeName,
+    });
   }
 
   function removeCloud(key) {
@@ -121,17 +154,34 @@
   function setMaterialMode(mode) {
     state.materialMode = mode;
     for (const entry of state.clouds.values()) {
-      const material = entry.pointcloud.material;
+      const pc = entry.pointcloud;
+      const material = pc.material;
       if (!material) continue;
+
       if (mode === "classification") {
         material.activeAttributeName =
-          "classification";
+          getAttribute(pc, "classification")
+            ? "classification"
+            : "elevation";
       } else if (mode === "elevation") {
-        material.activeAttributeName =
-          "elevation";
+        material.activeAttributeName = "elevation";
       } else {
-        material.activeAttributeName = "rgba";
+        material.activeAttributeName =
+          rgbAttributeName(pc) || "elevation";
       }
+    }
+  }
+
+  function fitRepeatedly() {
+    const delays = [0, 100, 350, 900, 1800];
+    for (const delay of delays) {
+      window.setTimeout(() => {
+        try {
+          state.viewer.fitToScreen(0.8);
+        } catch (error) {
+          console.warn("[LASViewer] fit failed", error);
+        }
+      }, delay);
     }
   }
 
@@ -150,44 +200,38 @@
     status("A carregar " + name + "…");
 
     Potree.loadPointCloud(url, name, (event) => {
-      if (!event || !event.pointcloud) {
-        status("Falha ao carregar " + name);
-        return;
-      }
-      const pointcloud = event.pointcloud;
-      configurePointcloud(pointcloud, classified);
-      state.viewer.scene.addPointCloud(pointcloud);
-      state.clouds.set(
-        key,
-        { pointcloud, classified, name }
-      );
-
-      if (activate) {
-        state.viewMode = key;
-      }
-      applyViewMode();
-      if (classified) {
-        setMaterialMode("classification");
-      } else if (
-        state.materialMode === "classification"
-      ) {
-        setMaterialMode("rgb");
-      }
-
       try {
-        state.viewer.fitToScreen(0.8);
-      } catch (_) {}
-      window.requestAnimationFrame(() => {
-        try {
-          state.viewer.fitToScreen(0.8);
-        } catch (_) {}
-      });
-      window.setTimeout(() => {
-        try {
-          state.viewer.fitToScreen(0.8);
-        } catch (_) {}
-      }, 350);
-      status(name + " · LOD dinâmico");
+        if (!event || !event.pointcloud) {
+          status("Falha ao carregar " + name);
+          return;
+        }
+
+        const pointcloud = event.pointcloud;
+        configurePointcloud(pointcloud, classified);
+        pointcloud.visible = true;
+        state.viewer.scene.addPointCloud(pointcloud);
+        state.clouds.set(
+          key,
+          { pointcloud, classified, name }
+        );
+
+        if (activate) {
+          state.viewMode = key;
+        }
+        applyViewMode();
+
+        if (classified) {
+          setMaterialMode("classification");
+        } else {
+          setMaterialMode("rgb");
+        }
+
+        fitRepeatedly();
+        status(name + " · LOD dinâmico · pontos a carregar");
+      } catch (error) {
+        console.error("[LASViewer] loadCloud failed", error);
+        status("Erro na viewport: " + String(error));
+      }
     });
   }
 
@@ -204,13 +248,12 @@
     if (mode === "classified") {
       setMaterialMode("classification");
     }
+    fitRepeatedly();
   }
 
   function fit() {
     if (!state.viewer) return;
-    try {
-      state.viewer.fitToScreen(0.8);
-    } catch (_) {}
+    fitRepeatedly();
   }
 
   function clear() {
@@ -221,6 +264,24 @@
     state.materialMode = "rgb";
     status("Abra uma nuvem LAS / LAZ");
   }
+
+  window.addEventListener("error", (event) => {
+    console.error(
+      "[LASViewer] window error",
+      event.message,
+      event.error
+    );
+  });
+
+  window.addEventListener(
+    "unhandledrejection",
+    (event) => {
+      console.error(
+        "[LASViewer] promise rejection",
+        event.reason
+      );
+    }
+  );
 
   window.LASViewer = {
     loadCloud,
