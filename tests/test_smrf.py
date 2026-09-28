@@ -405,3 +405,48 @@ def test_progressive_morphology_preserves_steep_planar_edges():
     )
 
     assert not np.any(objects)
+
+
+def test_smrf_grid_has_no_artificial_partial_cell_border(tmp_path):
+    path = tmp_path / "partial_extent.las"
+    axis = np.arange(0.0, 21.0, 0.5)
+    xs, ys = np.meshgrid(axis, axis)
+    z = 100.0 + 1.20 * xs + 0.20 * ys
+
+    header = laspy.LasHeader(
+        point_format=3,
+        version="1.2",
+    )
+    las = laspy.LasData(header)
+    las.x = xs.ravel()
+    las.y = ys.ravel()
+    las.z = z.ravel()
+    las.classification = np.zeros(
+        xs.size,
+        dtype=np.uint8,
+    )
+    las.write(path)
+
+    cloud = load_cloud(path)
+    result = run_smrf(
+        cloud,
+        SMRFParams(
+            cell=1.0,
+            slope=0.15,
+            window=8.0,
+            threshold=0.5,
+            scalar=1.25,
+            chunk_size=256,
+        ),
+    )
+
+    assert result.model.rows == 21
+    assert result.model.cols == 21
+    assert result.empty_cell_count == 0
+
+    classes = result.model.classify_xyz(
+        np.asarray(cloud.las.x),
+        np.asarray(cloud.las.y),
+        np.asarray(cloud.las.z),
+    )
+    assert np.all(classes == GROUND_CLASS)
