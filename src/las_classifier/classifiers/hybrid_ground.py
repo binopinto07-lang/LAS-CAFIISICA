@@ -80,6 +80,20 @@ class HybridGroundModel:
     ) -> np.ndarray:
         return self._score(x, y, z)
 
+    def confidence_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        return self._score(
+            x,
+            y,
+            z,
+            points=points,
+        )
+
     def classify_xyz(
         self,
         x: np.ndarray,
