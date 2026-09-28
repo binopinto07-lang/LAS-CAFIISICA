@@ -50,3 +50,7 @@ builds/archive/LAS_CAFIISICA_<TIMESTAMP>.zip
 ```
 
 O projeto não depende de GitHub Actions para testar ou compilar.
+
+## Runtime local
+
+Para máquinas sem Python 3.12 instalado, usar Local Build Manager V0.1.9 ou superior. O perfil ativa `auto_bootstrap_python` e o gestor prepara um runtime privado em `%LOCALAPPDATA%\\LBM\\py312` antes dos ambientes TEST/BUILD.
