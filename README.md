@@ -1,23 +1,37 @@
 # LAS-CAFIISICA
 
-Aplicação desktop Windows em desenvolvimento para leitura e futura reclassificação de nuvens LAS/LAZ.
+Aplicação desktop Windows para extração e reconstrução de terreno a partir de nuvens LAS/LAZ.
 
-## Estado funcional atual
+## Ground Engine V2
 
-- abre LAS e LAZ com `laspy`;
-- carrega XYZ real;
-- preserva a classificação de entrada em `original_class`;
-- inicia `working_class` em UNKNOWN, sem usar a classificação de entrada como decisão;
-- mostra estatísticas reais da cloud;
-- cria logs locais;
-- inclui testes LAS/LAZ;
-- inclui self-test Python e self-test do executável;
-- inclui perfil autoritativo para Local Build Manager V0.1.8 com SOURCE_GUARD;
-- build Windows por PyInstaller em caminho curto `%LOCALAPPDATA%\LBM\LASCAFIISICA`.
+A branch `ground-engine-v2` mantém o SMRF existente como motor Legacy e acrescenta:
 
-Ainda não existem motores SMRF, CSF, PTD ou Fusion.
+- **Hybrid** — modo predefinido; Adaptive PTD como autoridade geométrica e CSF como segunda opinião;
+- **Adaptive PTD** — seeds robustos multiescala, Delaunay TIN, distância real ponto→plano e densificação progressiva;
+- **CSF** — superfície independente cloth-like para validação;
+- **SMRF Legacy** — motor anterior preservado;
+- análise automática de spacing/densidade;
+- filtragem conservadora de outliers por plano local;
+- proteção de descontinuidades por mudança de normal entre triângulos;
+- deteção de gaps suportados, de bordo, grandes/desconhecidos e de descontinuidade;
+- reconstrução apenas de gaps suportados;
+- pontos reconstruídos marcados como LAS `synthetic`;
+- **EXPORT GROUND ONLY** para exportar apenas solo real e, opcionalmente, solo reconstruído;
+- viewport Original / Final Ground / Comparar.
 
-## Desenvolvimento
+A classificação original do LAS é preservada mas não é usada como input para decidir o novo terreno.
+
+## Objetivo
+
+A saída Ground Only deve conter:
+
+- pontos medidos aceites como terreno;
+- pontos sintéticos apenas em gaps geometricamente suportados;
+- sem árvores, copas, arbustos, vegetação suspensa, edifícios, veículos ou ruído.
+
+É preferível deixar um gap sem preencher do que inventar uma superfície sem suporte.
+
+## Desenvolvimento local
 
 ```text
 python -m pip install -e ".[dev]"
@@ -27,30 +41,10 @@ las-cafiisica
 
 ## Local Build Manager
 
-Selecionar a pasta/cloned repository `LAS-CAFIISICA` no Local Build Manager V0.1.8.
-O gestor descobre `localbuild/las_cafiisica.json` diretamente no repositório.
-
-Pipelines disponíveis:
-
-- `test`: dependências, compileall, pytest e self-test Python;
-- `build`: PyInstaller, verificação do EXE, self-test do EXE e ZIP;
-- `full`: TEST + BUILD numa única execução.
-
-O SOURCE_GUARD exige:
+Esta branch usa:
 
 ```text
-LAS_CAFIISICA_BUILD_SOURCE_2026_09_R1
+LAS_CAFIISICA_GROUND_V2_2026_09_R1
 ```
 
-Saída esperada:
-
-```text
-builds/latest/LAS_CAFIISICA_Windows_x64.zip
-builds/archive/LAS_CAFIISICA_<TIMESTAMP>.zip
-```
-
-O projeto não depende de GitHub Actions para testar ou compilar.
-
-## Runtime local
-
-Para máquinas sem Python 3.12 instalado, usar Local Build Manager V0.1.9 ou superior. O perfil ativa `auto_bootstrap_python` e o gestor prepara um runtime privado em `%LOCALAPPDATA%\\LBM\\py312` antes dos ambientes TEST/BUILD.
+O projeto continua sem depender de GitHub Actions.

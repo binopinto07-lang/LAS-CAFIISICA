@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import gc
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -25,10 +28,11 @@ from PySide6.QtWidgets import (
 from . import __version__
 from .classifiers.smrf import SMRFParams
 from .cloud.classification_worker import (
-    ClassifiedExportWorker,
-    SMRFWorker,
+    GroundEngineWorker,
+    GroundExportWorker,
 )
 from .cloud.worker import CloudLoadWorker
+from .ground.types import GroundEngineParams
 from .viewer.widget import PointCloudViewer
 from .viewer.workers import ViewerPrepareWorker
 
@@ -40,14 +44,14 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(f"LAS-CAFIISICA {__version__}")
-        self.resize(1500, 900)
-        self.setMinimumSize(1180, 720)
+        self.resize(1540, 920)
+        self.setMinimumSize(1200, 740)
 
         self._cloud = None
-        self._smrf_result = None
+        self._ground_result = None
         self._loader: CloudLoadWorker | None = None
-        self._smrf_worker: SMRFWorker | None = None
-        self._export_worker: ClassifiedExportWorker | None = None
+        self._ground_worker: GroundEngineWorker | None = None
+        self._export_worker: GroundExportWorker | None = None
         self._viewer_worker: ViewerPrepareWorker | None = None
         self._pending_filename: str | None = None
         self._viewer_loaded: set[str] = set()
@@ -56,79 +60,112 @@ class MainWindow(QMainWindow):
         self.open_button.clicked.connect(self.open_cloud)
 
         self.file_label = QLabel("No cloud loaded")
-        self.file_label.setTextInteractionFlags(
-            Qt.TextSelectableByMouse
-        )
+        self.file_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.file_label.setWordWrap(True)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setVisible(False)
 
+        engine_box = QGroupBox("GROUND ENGINE")
+        form = QFormLayout()
+
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItems(
+            [
+                "Hybrid",
+                "Adaptive PTD",
+                "CSF",
+                "SMRF Legacy",
+            ]
+        )
+        self.engine_combo.setCurrentText("Hybrid")
+
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItems(
+            ["Fast", "Balanced", "High", "Extreme"]
+        )
+        self.quality_combo.setCurrentText("Balanced")
+
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItems(
+            [
+                "General",
+                "Mountain / Talude",
+                "Forest",
+                "Photogrammetry",
+                "LiDAR",
+                "High Density",
+            ]
+        )
+        self.profile_combo.setCurrentText("Mountain / Talude")
+
+        self.fill_spacing_spin = self._spin(
+            0.0,
+            0.0,
+            1.00,
+            0.05,
+            2,
+        )
+        self.fill_spacing_spin.setSpecialValueText("Auto")
+
+        self.include_synthetic = QCheckBox(
+            "Include reconstructed ground"
+        )
+        self.include_synthetic.setChecked(True)
+
+        form.addRow("Engine", self.engine_combo)
+        form.addRow("Ground quality", self.quality_combo)
+        form.addRow("Profile", self.profile_combo)
+        form.addRow(
+            "Synthetic spacing (m)",
+            self.fill_spacing_spin,
+        )
+        form.addRow("", self.include_synthetic)
+
+        legacy_box = QGroupBox("SMRF LEGACY / ADVANCED")
+        legacy_form = QFormLayout()
+        self.cell_spin = self._spin(1.0, 0.10, 20.0, 0.10, 2)
+        self.slope_spin = self._spin(0.15, 0.0, 5.0, 0.01, 3)
+        self.window_spin = self._spin(18.0, 1.0, 200.0, 1.0, 1)
+        self.threshold_spin = self._spin(0.50, 0.0, 10.0, 0.05, 2)
+        self.scalar_spin = self._spin(1.25, 0.10, 10.0, 0.05, 2)
+        legacy_form.addRow("Cell (m)", self.cell_spin)
+        legacy_form.addRow("Slope", self.slope_spin)
+        legacy_form.addRow("Window (m)", self.window_spin)
+        legacy_form.addRow("Threshold (m)", self.threshold_spin)
+        legacy_form.addRow("Scalar", self.scalar_spin)
+        legacy_box.setLayout(legacy_form)
+
+        buttons = QHBoxLayout()
+        self.ground_button = QPushButton("RUN GROUND ENGINE")
+        self.ground_button.setEnabled(False)
+        self.ground_button.clicked.connect(self.run_ground_engine)
+
+        self.export_button = QPushButton("EXPORT GROUND ONLY")
+        self.export_button.setEnabled(False)
+        self.export_button.clicked.connect(self.export_ground_only)
+
+        buttons.addWidget(self.ground_button)
+        buttons.addWidget(self.export_button)
+        form.addRow(buttons)
+        engine_box.setLayout(form)
+
         self.statistics_view = QPlainTextEdit()
         self.statistics_view.setReadOnly(True)
         self.statistics_view.setPlaceholderText(
-            "Open a LAS/LAZ file to calculate real cloud statistics."
+            "Open a LAS/LAZ file to analyse the cloud."
         )
-
-        smrf_box = QGroupBox(
-            "GROUND CLASSIFICATION — SMRF + 3D"
-        )
-        form = QFormLayout()
-        self.cell_spin = self._spin(
-            1.0, 0.10, 20.0, 0.10, 2
-        )
-        self.slope_spin = self._spin(
-            0.15, 0.0, 5.0, 0.01, 3
-        )
-        self.window_spin = self._spin(
-            18.0, 1.0, 200.0, 1.0, 1
-        )
-        self.threshold_spin = self._spin(
-            0.50, 0.0, 10.0, 0.05, 2
-        )
-        self.scalar_spin = self._spin(
-            1.25, 0.10, 10.0, 0.05, 2
-        )
-        self.fill_spacing_spin = self._spin(
-            0.25, 0.10, 1.00, 0.05, 2
-        )
-        form.addRow("Cell (m)", self.cell_spin)
-        form.addRow("Slope", self.slope_spin)
-        form.addRow("Window (m)", self.window_spin)
-        form.addRow("Threshold (m)", self.threshold_spin)
-        form.addRow("Scalar", self.scalar_spin)
-        form.addRow(
-            "Fill spacing (m)",
-            self.fill_spacing_spin,
-        )
-
-        buttons = QHBoxLayout()
-        self.smrf_button = QPushButton(
-            "CLASSIFY GROUND — SMRF + 3D"
-        )
-        self.smrf_button.setEnabled(False)
-        self.smrf_button.clicked.connect(self.run_smrf)
-        self.export_button = QPushButton(
-            "EXPORT CLASSIFIED LAS / LAZ"
-        )
-        self.export_button.setEnabled(False)
-        self.export_button.clicked.connect(
-            self.export_classified
-        )
-        buttons.addWidget(self.smrf_button)
-        buttons.addWidget(self.export_button)
-        form.addRow(buttons)
-        smrf_box.setLayout(form)
 
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.addWidget(self.open_button)
         left_layout.addWidget(self.file_label)
         left_layout.addWidget(self.progress)
-        left_layout.addWidget(smrf_box)
+        left_layout.addWidget(engine_box)
+        left_layout.addWidget(legacy_box)
         left_layout.addWidget(self.statistics_view, 1)
-        left.setMinimumWidth(390)
+        left.setMinimumWidth(410)
 
         self.viewer = PointCloudViewer(self)
 
@@ -137,7 +174,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.viewer)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([420, 1080])
+        splitter.setSizes([430, 1110])
         self.setCentralWidget(splitter)
         self.statusBar().showMessage("Ready")
 
@@ -163,11 +200,11 @@ class MainWindow(QMainWindow):
     ) -> None:
         self.progress.setVisible(active)
         self.open_button.setEnabled(not active)
-        self.smrf_button.setEnabled(
+        self.ground_button.setEnabled(
             not active and self._cloud is not None
         )
         self.export_button.setEnabled(
-            not active and self._smrf_result is not None
+            not active and self._ground_result is not None
         )
         if active:
             self.statusBar().showMessage(message)
@@ -186,7 +223,7 @@ class MainWindow(QMainWindow):
             worker is not None
             for worker in (
                 self._loader,
-                self._smrf_worker,
+                self._ground_worker,
                 self._export_worker,
                 self._viewer_worker,
             )
@@ -203,17 +240,14 @@ class MainWindow(QMainWindow):
             return
 
         self._cloud = None
-        self._smrf_result = None
+        self._ground_result = None
         self._viewer_loaded.clear()
         self.viewer.clear()
         gc.collect()
 
         self._pending_filename = filename
         self.progress.setRange(0, 0)
-        self._busy(
-            True,
-            "Loading point cloud in background...",
-        )
+        self._busy(True, "Loading point cloud in background...")
 
         worker = CloudLoadWorker(filename, self)
         worker.loaded.connect(self._load_succeeded)
@@ -224,9 +258,7 @@ class MainWindow(QMainWindow):
 
     def _load_succeeded(self, cloud, stats) -> None:
         self._cloud = cloud
-        filename = (
-            self._pending_filename or str(cloud.path)
-        )
+        filename = self._pending_filename or str(cloud.path)
         self.file_label.setText(str(Path(filename)))
         self.statistics_view.setPlainText(
             "\n".join(stats.as_display_lines())
@@ -236,14 +268,7 @@ class MainWindow(QMainWindow):
         )
 
     def _load_failed(self, message: str) -> None:
-        filename = (
-            self._pending_filename or "<unknown>"
-        )
-        LOGGER.error(
-            "Failed to load cloud: %s | %s",
-            filename,
-            message,
-        )
+        LOGGER.error("Failed to load cloud: %s", message)
         self.statusBar().showMessage("Load failed")
         QMessageBox.critical(
             self,
@@ -263,46 +288,26 @@ class MainWindow(QMainWindow):
             self._prepare_viewer("original")
 
     def _prepare_viewer(self, kind: str) -> None:
-        if (
-            self._cloud is None
-            or self._viewer_worker is not None
-        ):
+        if self._cloud is None or self._viewer_worker is not None:
             return
-        if (
-            kind == "classified"
-            and self._smrf_result is None
-        ):
+        if kind == "classified" and self._ground_result is None:
             return
 
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        label = (
-            "original"
-            if kind == "original"
-            else "classified"
-        )
-        self._busy(
-            True,
-            f"Preparing {label} 3D viewport...",
-        )
+        label = "original" if kind == "original" else "final ground"
+        self._busy(True, f"Preparing {label} 3D viewport...")
+
         worker = ViewerPrepareWorker(
             kind,
             self._cloud.path,
-            (
-                self._smrf_result
-                if kind == "classified"
-                else None
-            ),
+            self._ground_result if kind == "classified" else None,
             self,
         )
-        worker.progress_changed.connect(
-            self._set_progress
-        )
+        worker.progress_changed.connect(self._set_progress)
         worker.ready.connect(self._viewer_ready)
         worker.failed.connect(self._viewer_failed)
-        worker.finished.connect(
-            self._viewer_finished
-        )
+        worker.finished.connect(self._viewer_finished)
         self._viewer_worker = worker
         worker.start()
 
@@ -322,9 +327,7 @@ class MainWindow(QMainWindow):
             activate=True,
         )
         self.viewer.set_view_mode(kind)
-        self.statusBar().showMessage(
-            f"3D viewport ready: {title}"
-        )
+        self.statusBar().showMessage(f"3D viewport ready: {title}")
 
     def _viewer_failed(
         self,
@@ -342,149 +345,183 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(
             self,
             "LAS-CAFIISICA — VIEWPORT 3D",
-            (
-                f"Could not prepare {kind} "
-                f"viewport:\n{message}"
-            ),
+            f"Could not prepare {kind} viewport:\n{message}",
         )
 
     def _viewer_finished(self) -> None:
         worker = self._viewer_worker
         self._viewer_worker = None
         self._busy(False)
-        if self._cloud is not None:
-            self.statusBar().showMessage(
-                (
-                    f"Loaded "
-                    f"{self._cloud.point_count:,} points"
-                )
-            )
         if worker is not None:
             worker.deleteLater()
 
-    def _smrf_params(self) -> SMRFParams:
+    def _engine_params(self) -> GroundEngineParams:
+        quality = self.quality_combo.currentText().lower()
+        params = GroundEngineParams.preset(quality)
+        profile = self.profile_combo.currentText()
+
+        if profile == "Mountain / Talude":
+            params = replace(
+                params,
+                max_iteration_angle_deg=18.0,
+                max_iteration_distance=0.18,
+                confidence_threshold=0.66,
+                gap_max_size=7.0,
+            )
+        elif profile == "Forest":
+            params = replace(
+                params,
+                max_iteration_angle_deg=14.0,
+                max_iteration_distance=0.16,
+                confidence_threshold=0.70,
+                gap_max_size=6.0,
+            )
+        elif profile == "Photogrammetry":
+            params = replace(
+                params,
+                max_iteration_angle_deg=16.0,
+                max_iteration_distance=0.20,
+                confidence_threshold=0.65,
+            )
+        elif profile == "LiDAR":
+            params = replace(
+                params,
+                max_iteration_angle_deg=15.0,
+                max_iteration_distance=0.18,
+                confidence_threshold=0.66,
+            )
+        elif profile == "High Density":
+            params = replace(
+                params,
+                sample_target=max(params.sample_target, 4_000_000),
+                candidate_spacing=0.30,
+                confidence_threshold=0.67,
+            )
+
+        spacing = self.fill_spacing_spin.value()
+        if spacing > 0:
+            params = replace(
+                params,
+                synthetic_spacing=spacing,
+            )
+        return params
+
+    def _legacy_params(self) -> SMRFParams:
+        fill_spacing = self.fill_spacing_spin.value()
         return SMRFParams(
             cell=self.cell_spin.value(),
             slope=self.slope_spin.value(),
             window=self.window_spin.value(),
             threshold=self.threshold_spin.value(),
             scalar=self.scalar_spin.value(),
-            fill_spacing=self.fill_spacing_spin.value(),
+            fill_spacing=fill_spacing if fill_spacing > 0 else 0.25,
+            terrain3d_enabled=False,
         )
 
-    def run_smrf(self) -> None:
-        if (
-            self._cloud is None
-            or self._smrf_worker is not None
-        ):
+    def run_ground_engine(self) -> None:
+        if self._cloud is None or self._ground_worker is not None:
             return
 
-        self._smrf_result = None
+        self._ground_result = None
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(
-            True,
-            "Starting SMRF classification...",
-        )
+        engine = self.engine_combo.currentText()
+        self._busy(True, f"Starting {engine}...")
 
-        worker = SMRFWorker(
+        worker = GroundEngineWorker(
             self._cloud,
-            self._smrf_params(),
+            engine,
+            self._engine_params(),
+            self._legacy_params(),
             self,
         )
-        worker.progress_changed.connect(
-            self._set_progress
-        )
-        worker.completed.connect(
-            self._smrf_succeeded
-        )
-        worker.failed.connect(self._smrf_failed)
-        worker.finished.connect(
-            self._smrf_finished
-        )
-        self._smrf_worker = worker
+        worker.progress_changed.connect(self._set_progress)
+        worker.completed.connect(self._ground_succeeded)
+        worker.failed.connect(self._ground_failed)
+        worker.finished.connect(self._ground_finished)
+        self._ground_worker = worker
         worker.start()
 
-    def _smrf_succeeded(self, result) -> None:
-        self._smrf_result = result
-        p = result.model.params
-        self.statistics_view.appendPlainText(
-            "\n".join(
+    def _ground_succeeded(self, result) -> None:
+        self._ground_result = result
+        engine = getattr(result, "engine_name", "SMRF Legacy")
+        lines = [
+            "",
+            f"GROUND ENGINE RESULT — {engine}",
+            f"Real ground: {getattr(result, 'ground_count', 0):,}",
+            f"Rejected: {getattr(result, 'non_ground_count', 0):,}",
+        ]
+
+        analysis = getattr(result, "analysis", None)
+        if analysis is not None:
+            lines.extend(
                 [
-                    "",
-                    "SMRF RESULT",
-                    (
-                        "Ground (class 2): "
-                        f"{result.ground_count:,}"
-                    ),
-                    (
-                        "Non-ground (class 1): "
-                        f"{result.non_ground_count:,}"
-                    ),
-                    f"Cell: {p.cell:.2f} m",
-                    f"Slope: {p.slope:.3f}",
-                    f"Window: {p.window:.1f} m",
-                    f"Threshold: {p.threshold:.2f} m",
-                    f"Scalar: {p.scalar:.2f}",
-                    (
-                        "3D terrain voxels: "
-                        f"{result.terrain3d_voxel_count:,}"
-                    ),
-                    (
-                        "3D seed voxels: "
-                        f"{result.terrain3d_seed_voxel_count:,}"
-                    ),
-                    (
-                        "Synthetic ground fill: "
-                        f"{result.synthetic_fill_point_count:,} pts"
-                    ),
-                    (
-                        "Fill spacing: "
-                        f"{result.model.effective_fill_spacing:.2f} m"
-                    ),
-                    (
-                        "Elapsed: "
-                        f"{result.elapsed_seconds:.1f} s"
-                    ),
+                    f"Median spacing: {analysis.median_spacing:.3f} m",
+                    f"Local/global density: {analysis.xy_density:.2f} pts/m²",
                 ]
             )
-        )
-        self.statusBar().showMessage(
-            "SMRF + 3D classification complete"
+
+        for label, attr in (
+            ("Ground seeds", "seed_count"),
+            ("PTD candidates", "candidate_count"),
+            ("PTD iterations", "ptd_iterations"),
+            ("Detected gaps", "detected_gap_count"),
+            ("Supported gaps", "supported_gap_count"),
+            ("Rejected gaps", "rejected_gap_count"),
+            ("Synthetic ground", "synthetic_fill_point_count"),
+        ):
+            if hasattr(result, attr):
+                lines.append(f"{label}: {getattr(result, attr):,}")
+
+        if hasattr(result, "mean_confidence"):
+            lines.append(
+                f"Mean confidence: {result.mean_confidence:.3f}"
+            )
+        lines.append(
+            f"Elapsed: {getattr(result, 'elapsed_seconds', 0.0):.1f} s"
         )
 
-    def _smrf_failed(self, message: str) -> None:
-        self.statusBar().showMessage("SMRF failed")
+        self.statistics_view.appendPlainText("\n".join(lines))
+        self.statusBar().showMessage(
+            f"{engine} ground extraction complete"
+        )
+
+    def _ground_failed(self, message: str) -> None:
+        self.statusBar().showMessage("Ground engine failed")
         QMessageBox.critical(
             self,
-            "LAS-CAFIISICA — SMRF",
-            f"SMRF failed:\n{message}",
+            "LAS-CAFIISICA — GROUND ENGINE",
+            f"Ground engine failed:\n{message}",
         )
 
-    def _smrf_finished(self) -> None:
-        worker = self._smrf_worker
-        self._smrf_worker = None
+    def _ground_finished(self) -> None:
+        worker = self._ground_worker
+        self._ground_worker = None
         self._busy(False)
         if worker is not None:
             worker.deleteLater()
-        if self._smrf_result is not None:
+        if self._ground_result is not None:
             self._prepare_viewer("classified")
 
-    def export_classified(self) -> None:
+    def export_ground_only(self) -> None:
         if (
             self._cloud is None
-            or self._smrf_result is None
+            or self._ground_result is None
             or self._export_worker is not None
         ):
             return
 
         source = self._cloud.path
-        suggested = source.with_name(
-            f"{source.stem}_SMRF.laz"
+        include_synthetic = self.include_synthetic.isChecked()
+        suffix = (
+            "_GROUND_COMPLETE.laz"
+            if include_synthetic
+            else "_GROUND_ONLY.laz"
         )
+        suggested = source.with_name(source.stem + suffix)
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Export classified cloud",
+            "Export Ground Only",
             str(suggested),
             "LAZ (*.laz);;LAS (*.las)",
         )
@@ -492,59 +529,41 @@ class MainWindow(QMainWindow):
             return
 
         output = Path(filename)
-        if output.suffix.lower() not in {
-            ".las",
-            ".laz",
-        }:
+        if output.suffix.lower() not in {".las", ".laz"}:
             output = output.with_suffix(".laz")
 
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(
-            True,
-            "Exporting classified cloud...",
-        )
+        self._busy(True, "Exporting ground-only cloud...")
 
-        worker = ClassifiedExportWorker(
+        worker = GroundExportWorker(
             source,
             output,
-            self._smrf_result,
+            self._ground_result,
+            include_synthetic,
             self,
         )
-        worker.progress_changed.connect(
-            self._set_progress
-        )
-        worker.completed.connect(
-            self._export_succeeded
-        )
+        worker.progress_changed.connect(self._set_progress)
+        worker.completed.connect(self._export_succeeded)
         worker.failed.connect(self._export_failed)
-        worker.finished.connect(
-            self._export_finished
-        )
+        worker.finished.connect(self._export_finished)
         self._export_worker = worker
         worker.start()
 
     def _export_succeeded(self, path: str) -> None:
-        self.statusBar().showMessage(
-            f"Export complete: {path}"
-        )
+        self.statusBar().showMessage(f"Ground export complete: {path}")
         QMessageBox.information(
             self,
             "LAS-CAFIISICA",
-            (
-                "Classified cloud exported:\n"
-                f"{path}"
-            ),
+            f"Ground-only cloud exported:\n{path}",
         )
 
     def _export_failed(self, message: str) -> None:
-        self.statusBar().showMessage(
-            "Export failed"
-        )
+        self.statusBar().showMessage("Ground export failed")
         QMessageBox.critical(
             self,
             "LAS-CAFIISICA",
-            f"Export failed:\n{message}",
+            f"Ground export failed:\n{message}",
         )
 
     def _export_finished(self) -> None:

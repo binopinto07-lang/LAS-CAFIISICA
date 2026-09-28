@@ -4,7 +4,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from ..classifiers.smrf import SMRFResult
 from .converter import prepare_classified, prepare_original
 
 
@@ -17,14 +16,12 @@ class ViewerPrepareWorker(QThread):
         self,
         kind: str,
         source_path: Path,
-        result: SMRFResult | None = None,
+        result=None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         if kind not in {"original", "classified"}:
-            raise ValueError(
-                f"Unsupported viewer kind: {kind}"
-            )
+            raise ValueError(f"Unsupported viewer kind: {kind}")
         self.kind = kind
         self.source_path = source_path
         self.result = result
@@ -39,21 +36,27 @@ class ViewerPrepareWorker(QThread):
                     self.source_path,
                     callback,
                 )
-                title = (
-                    self.source_path.name + " — Original"
-                )
+                title = self.source_path.name + " — Original"
                 classified = False
             else:
                 if self.result is None:
                     raise RuntimeError(
-                        "Classified viewer requires an SMRF result"
+                        "Final ground viewer requires a ground result"
                     )
                 dataset = prepare_classified(
                     self.source_path,
                     self.result,
                     callback,
                 )
-                title = self.source_path.name + " — SMRF"
+                engine = getattr(
+                    self.result,
+                    "engine_name",
+                    "SMRF",
+                )
+                title = (
+                    self.source_path.name
+                    + f" — {engine} — Final Ground"
+                )
                 classified = True
         except Exception as exc:
             self.failed.emit(self.kind, str(exc))

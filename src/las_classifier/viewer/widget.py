@@ -51,8 +51,8 @@ class PointCloudViewer(QWidget):
         }
 
         self.original_button = QPushButton("ORIGINAL")
-        self.classified_button = QPushButton("CLASSIFICADA")
-        self.both_button = QPushButton("AMBAS")
+        self.classified_button = QPushButton("FINAL GROUND")
+        self.both_button = QPushButton("COMPARAR")
         self.fit_button = QPushButton("ENQUADRAR")
         self.rgb_button = QPushButton("RGB")
         self.elevation_button = QPushButton("ELEVAÇÃO")

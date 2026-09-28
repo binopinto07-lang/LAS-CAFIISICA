@@ -2,7 +2,7 @@
   "id": "las_cafiisica",
   "name": "LAS-CAFIISICA",
   "repo_url": "https://github.com/binopinto07-lang/LAS-CAFIISICA.git",
-  "branch": "main",
+  "branch": "ground-engine-v2",
   "python_version": "3.12",
   "dist_dir_name": "LAS_CAFIISICA",
   "checks": [
@@ -213,7 +213,7 @@
     ]
   },
   "release": {},
-  "config_revision": 14,
+  "config_revision": 15,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -242,11 +242,29 @@
     "tests/test_viewer_server.py",
     "tests/test_viewer_converter.py",
     "src/las_classifier/classifiers/terrain3d.py",
-    "tests/test_terrain3d.py"
+    "tests/test_terrain3d.py",
+    "src/las_classifier/classifiers/adaptive_ptd.py",
+    "src/las_classifier/classifiers/csf_engine.py",
+    "src/las_classifier/classifiers/hybrid_ground.py",
+    "src/las_classifier/ground/__init__.py",
+    "src/las_classifier/ground/types.py",
+    "src/las_classifier/ground/density.py",
+    "src/las_classifier/ground/noise_filter.py",
+    "src/las_classifier/ground/ground_seeds.py",
+    "src/las_classifier/ground/local_geometry.py",
+    "src/las_classifier/ground/terrain_tin.py",
+    "src/las_classifier/ground/breaklines.py",
+    "src/las_classifier/ground/gap_detection.py",
+    "src/las_classifier/ground/gap_reconstruction.py",
+    "src/las_classifier/ground/ground_confidence.py",
+    "src/las_classifier/ground/ground_export.py",
+    "tests/test_ground_engine.py",
+    "tests/test_ground_export.py",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R13"
+    "value": "LAS_CAFIISICA_GROUND_V2_2026_09_R1"
   },
   "auto_bootstrap_python": true
 }
