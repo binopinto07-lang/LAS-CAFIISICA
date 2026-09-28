@@ -481,6 +481,74 @@ def _inpaint_surface(
     )
 
 
+def _linear_extrapolate_pad(
+    surface: NDArray[np.float32],
+    pad: int,
+) -> NDArray[np.float32]:
+    """Extend edge gradients so steep terrain stays continuous at borders."""
+
+    if pad <= 0:
+        return surface
+
+    rows, cols = surface.shape
+    padded = np.pad(
+        surface,
+        ((pad, pad), (pad, pad)),
+        mode="edge",
+    ).astype(np.float32, copy=False)
+
+    if cols > 1:
+        left_step = surface[:, 1] - surface[:, 0]
+        right_step = surface[:, -1] - surface[:, -2]
+        for distance in range(1, pad + 1):
+            padded[pad : pad + rows, pad - distance] = (
+                surface[:, 0] - left_step * distance
+            )
+            padded[
+                pad : pad + rows,
+                pad + cols - 1 + distance,
+            ] = (
+                surface[:, -1] + right_step * distance
+            )
+
+    if rows > 1:
+        top_step = padded[pad + 1, :] - padded[pad, :]
+        bottom_step = (
+            padded[pad + rows - 1, :]
+            - padded[pad + rows - 2, :]
+        )
+        for distance in range(1, pad + 1):
+            padded[pad - distance, :] = (
+                padded[pad, :] - top_step * distance
+            )
+            padded[
+                pad + rows - 1 + distance,
+                :,
+            ] = (
+                padded[pad + rows - 1, :]
+                + bottom_step * distance
+            )
+
+    return padded
+
+
+def _opening_with_extrapolated_border(
+    surface: NDArray[np.float32],
+    radius: int,
+) -> NDArray[np.float32]:
+    padded = _linear_extrapolate_pad(surface, radius)
+    opened = grey_opening(
+        padded,
+        footprint=_disk(radius),
+        mode="nearest",
+    ).astype(np.float32, copy=False)
+
+    return opened[
+        radius : -radius,
+        radius : -radius,
+    ]
+
+
 def _progressive_object_mask(
     surface: NDArray[np.float32],
     *,
@@ -510,13 +578,9 @@ def _progressive_object_mask(
         1,
         maximum + 1,
     ):
-        opened = grey_opening(
+        opened = _opening_with_extrapolated_border(
             last_surface,
-            footprint=_disk(radius),
-            mode="nearest",
-        ).astype(
-            np.float32,
-            copy=False,
+            radius,
         )
 
         elevation_limit = (
@@ -698,7 +762,7 @@ def run_smrf(
     LOGGER.info(
         "SMRF_START points=%d cell=%s slope=%s window=%s "
         "threshold=%s scalar=%s fill_spacing=%s grid=%dx%d "
-        "algorithm=PINGEL_R2",
+        "algorithm=PINGEL_R3_EDGE_SAFE",
         cloud.point_count,
         params.cell,
         params.slope,
