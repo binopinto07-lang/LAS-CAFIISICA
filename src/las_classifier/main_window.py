@@ -467,6 +467,7 @@ class MainWindow(QMainWindow):
             ("PTD iterations", "ptd_iterations"),
             ("Detected gaps", "detected_gap_count"),
             ("Supported gaps", "supported_gap_count"),
+            ("Occluded vegetation gaps", "occluded_gap_count"),
             ("Rejected gaps", "rejected_gap_count"),
             ("Synthetic ground", "synthetic_fill_point_count"),
         ):

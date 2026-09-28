@@ -329,6 +329,7 @@ class AdaptivePTDResult:
     ptd_iterations: int
     detected_gap_count: int
     supported_gap_count: int
+    occluded_gap_count: int
     rejected_gap_count: int
     synthetic_fill_point_count: int
     mean_confidence: float
@@ -450,6 +451,11 @@ def run_adaptive_ptd(
         tin,
         dense_edge=dense_edge,
         max_gap_edge=gap_max_size,
+        evidence_xyz=sample_xyz,
+        occlusion_hag=max(
+            0.50,
+            analysis.median_spacing * 6.0,
+        ),
     )
     synthetic_count = estimate_fill_count(
         tin,
@@ -534,6 +540,7 @@ def run_adaptive_ptd(
     LOGGER.info("NON_GROUND=%d", non_ground)
     LOGGER.info("GAPS_TOTAL=%d", gaps.detected_count)
     LOGGER.info("GAPS_SUPPORTED=%d", gaps.supported_count)
+    LOGGER.info("GAPS_OCCLUDED=%d", gaps.occluded_count)
     LOGGER.info("GAPS_REJECTED=%d", gaps.rejected_count)
     LOGGER.info("SYNTHETIC_POINTS=%d", synthetic_count)
     LOGGER.info("GROUND_CONFIDENCE_MEAN=%.4f", mean_confidence)
@@ -551,6 +558,7 @@ def run_adaptive_ptd(
         ptd_iterations=iterations,
         detected_gap_count=gaps.detected_count,
         supported_gap_count=gaps.supported_count,
+        occluded_gap_count=gaps.occluded_count,
         rejected_gap_count=gaps.rejected_count,
         synthetic_fill_point_count=synthetic_count,
         mean_confidence=mean_confidence,

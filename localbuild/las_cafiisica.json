@@ -213,7 +213,7 @@
     ]
   },
   "release": {},
-  "config_revision": 17,
+  "config_revision": 18,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -261,11 +261,12 @@
     "tests/test_ground_engine.py",
     "tests/test_ground_export.py",
     "THIRD_PARTY_NOTICES.md",
-    "src/las_classifier/ground/height_above_ground.py"
+    "src/las_classifier/ground/height_above_ground.py",
+    "tests/test_hag_and_gaps.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_GROUND_V2_2026_09_R3"
+    "value": "LAS_CAFIISICA_GROUND_V2_2026_09_R4"
   },
   "auto_bootstrap_python": true
 }

@@ -133,6 +133,7 @@ class HybridGroundResult:
     ptd_iterations: int
     detected_gap_count: int
     supported_gap_count: int
+    occluded_gap_count: int
     rejected_gap_count: int
     synthetic_fill_point_count: int
     mean_confidence: float
@@ -219,9 +220,10 @@ def run_hybrid_ground(
     LOGGER.info("GROUND_REAL=%d", ground_count)
     LOGGER.info("NON_GROUND=%d", non_ground)
     LOGGER.info(
-        "GAPS_TOTAL=%d GAPS_SUPPORTED=%d GAPS_REJECTED=%d",
+        "GAPS_TOTAL=%d GAPS_SUPPORTED=%d GAPS_OCCLUDED=%d GAPS_REJECTED=%d",
         ptd_result.detected_gap_count,
         ptd_result.supported_gap_count,
+        ptd_result.occluded_gap_count,
         ptd_result.rejected_gap_count,
     )
     LOGGER.info(
@@ -243,6 +245,7 @@ def run_hybrid_ground(
         ptd_iterations=ptd_result.ptd_iterations,
         detected_gap_count=ptd_result.detected_gap_count,
         supported_gap_count=ptd_result.supported_gap_count,
+        occluded_gap_count=ptd_result.occluded_gap_count,
         rejected_gap_count=ptd_result.rejected_gap_count,
         synthetic_fill_point_count=model.synthetic_fill_point_count,
         mean_confidence=mean_confidence,
