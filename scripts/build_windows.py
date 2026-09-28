@@ -32,6 +32,56 @@ def _run(command: list[str], cwd: Path) -> None:
         raise SystemExit(completed.returncode)
 
 
+def _copy_runtime_assets(
+    repo: Path,
+    app_dist: Path,
+) -> None:
+    required = [
+        repo / "viewer" / "index.html",
+        repo / "viewer" / "app.js",
+        (
+            repo
+            / "vendor"
+            / "potree"
+            / "build"
+            / "potree"
+            / "potree.js"
+        ),
+        (
+            repo
+            / "vendor"
+            / "potreeconverter"
+            / "PotreeConverter.exe"
+        ),
+    ]
+    missing = [
+        str(path)
+        for path in required
+        if not path.exists()
+    ]
+    if missing:
+        raise RuntimeError(
+            "Viewer runtime assets missing:\n"
+            + "\n".join(missing)
+        )
+
+    shutil.copytree(
+        repo / "viewer",
+        app_dist / "viewer",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        repo / "vendor" / "potree",
+        app_dist / "vendor" / "potree",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        repo / "vendor" / "potreeconverter",
+        app_dist / "vendor" / "potreeconverter",
+        dirs_exist_ok=True,
+    )
+
+
 def main() -> int:
     if os.name != "nt":
         print(
@@ -48,9 +98,18 @@ def main() -> int:
 
     if root.exists():
         shutil.rmtree(root)
-    dist_root.mkdir(parents=True, exist_ok=True)
-    work_root.mkdir(parents=True, exist_ok=True)
-    spec_root.mkdir(parents=True, exist_ok=True)
+    dist_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    work_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    spec_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     command = [
         sys.executable,
@@ -78,11 +137,16 @@ def main() -> int:
         "pyproj",
         "--collect-all",
         "scipy",
+        "--hidden-import",
+        "PySide6.QtWebEngineWidgets",
+        "--hidden-import",
+        "PySide6.QtWebEngineCore",
         str(repo / "app" / "main.py"),
     ]
     _run(command, cwd=repo)
 
-    exe = dist_root / APP_NAME / f"{APP_NAME}.exe"
+    app_dist = dist_root / APP_NAME
+    exe = app_dist / f"{APP_NAME}.exe"
     if not exe.is_file():
         print(
             f"Executable was not created: {exe}",
@@ -90,7 +154,19 @@ def main() -> int:
         )
         return 3
 
+    _copy_runtime_assets(
+        repo,
+        app_dist,
+    )
     print(f"BUILD_OK={exe}")
+    print(
+        "VIEWER_OK="
+        f"{app_dist / 'viewer' / 'index.html'}"
+    )
+    print(
+        "POTREE_CONVERTER_OK="
+        f"{app_dist / 'vendor' / 'potreeconverter' / 'PotreeConverter.exe'}"
+    )
     return 0
 
 

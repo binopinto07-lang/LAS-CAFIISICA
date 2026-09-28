@@ -73,6 +73,14 @@
         "venv": "build"
       },
       {
+        "id": "viewer-vendor",
+        "name": "Preparar Potree + PotreeConverter",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'scripts/bootstrap_viewer_vendor.ps1'",
+        "timeout_minutes": 35,
+        "category": "build",
+        "venv": "build"
+      },
+      {
         "id": "pyinstaller",
         "name": "Criar LAS-CAFIISICA Windows",
         "command": "& '%PYTHON%' scripts/build_windows.py",
@@ -155,6 +163,14 @@
         "venv": "build"
       },
       {
+        "id": "viewer-vendor",
+        "name": "Preparar Potree + PotreeConverter",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'scripts/bootstrap_viewer_vendor.ps1'",
+        "timeout_minutes": 35,
+        "category": "build",
+        "venv": "build"
+      },
+      {
         "id": "pyinstaller",
         "name": "Criar LAS-CAFIISICA Windows",
         "command": "& '%PYTHON%' scripts/build_windows.py",
@@ -197,7 +213,7 @@
     ]
   },
   "release": {},
-  "config_revision": 7,
+  "config_revision": 8,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -213,11 +229,21 @@
     "src/las_classifier/classifiers/smrf.py",
     "src/las_classifier/cloud/exporter.py",
     "src/las_classifier/cloud/classification_worker.py",
-    "tests/test_smrf.py"
+    "tests/test_smrf.py",
+    "src/las_classifier/viewer/paths.py",
+    "src/las_classifier/viewer/server.py",
+    "src/las_classifier/viewer/converter.py",
+    "src/las_classifier/viewer/workers.py",
+    "src/las_classifier/viewer/widget.py",
+    "viewer/index.html",
+    "viewer/app.js",
+    "viewer/styles.css",
+    "scripts/bootstrap_viewer_vendor.ps1",
+    "tests/test_viewer_server.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R6"
+    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R7"
   },
   "auto_bootstrap_python": true
 }

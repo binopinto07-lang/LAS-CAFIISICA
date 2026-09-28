@@ -5,6 +5,7 @@ __pycache__/
 build/
 builds/
 dist/
+vendor/
 *.egg-info/
 logs/*.log
 LAS_CAFIISICA_SELF_TEST.txt

@@ -1,0 +1,196 @@
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+from PySide6.QtCore import QUrl
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+from PySide6.QtWebEngineWidgets import QWebEngineView
+
+from .server import ViewerServer
+
+
+LOGGER = logging.getLogger("las_cafiisica.viewer.widget")
+
+
+class PointCloudViewer(QWidget):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.server = ViewerServer()
+        self.server.start()
+        self._page_ready = False
+        self._pending_scripts: list[str] = []
+        self._loaded = {
+            "original": False,
+            "classified": False,
+        }
+
+        self.original_button = QPushButton("ORIGINAL")
+        self.classified_button = QPushButton("CLASSIFICADA")
+        self.both_button = QPushButton("AMBAS")
+        self.fit_button = QPushButton("ENQUADRAR")
+        self.rgb_button = QPushButton("RGB")
+        self.elevation_button = QPushButton("ELEVAÇÃO")
+        self.class_mode_button = QPushButton(
+            "CLASSIFICAÇÃO"
+        )
+
+        self.original_button.setEnabled(False)
+        self.classified_button.setEnabled(False)
+        self.both_button.setEnabled(False)
+
+        self.original_button.clicked.connect(
+            lambda: self.set_view_mode("original")
+        )
+        self.classified_button.clicked.connect(
+            lambda: self.set_view_mode("classified")
+        )
+        self.both_button.clicked.connect(
+            lambda: self.set_view_mode("both")
+        )
+        self.fit_button.clicked.connect(
+            lambda: self._run_js(
+                "window.LASViewer.fit();"
+            )
+        )
+        self.rgb_button.clicked.connect(
+            lambda: self.set_material_mode("rgb")
+        )
+        self.elevation_button.clicked.connect(
+            lambda: self.set_material_mode(
+                "elevation"
+            )
+        )
+        self.class_mode_button.clicked.connect(
+            lambda: self.set_material_mode(
+                "classification"
+            )
+        )
+
+        toolbar = QHBoxLayout()
+        toolbar.addWidget(QLabel("VIEWPORT 3D"))
+        toolbar.addWidget(self.original_button)
+        toolbar.addWidget(self.classified_button)
+        toolbar.addWidget(self.both_button)
+        toolbar.addStretch(1)
+        toolbar.addWidget(self.fit_button)
+        toolbar.addWidget(self.rgb_button)
+        toolbar.addWidget(self.elevation_button)
+        toolbar.addWidget(self.class_mode_button)
+
+        self.web = QWebEngineView(self)
+        self.web.loadFinished.connect(
+            self._on_load_finished
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(toolbar)
+        layout.addWidget(self.web, 1)
+
+        self.web.load(QUrl(self.server.app_url))
+
+    def _on_load_finished(
+        self,
+        ok: bool,
+    ) -> None:
+        self._page_ready = bool(ok)
+        if not ok:
+            LOGGER.error(
+                "Potree viewer HTML failed to load"
+            )
+            return
+        scripts = self._pending_scripts
+        self._pending_scripts = []
+        for script in scripts:
+            self.web.page().runJavaScript(script)
+
+    def _run_js(self, script: str) -> None:
+        if self._page_ready:
+            self.web.page().runJavaScript(script)
+        else:
+            self._pending_scripts.append(script)
+
+    def load_cloud(
+        self,
+        key: str,
+        dataset_dir: str | Path,
+        title: str,
+        classified: bool,
+        activate: bool = True,
+    ) -> None:
+        url = self.server.register_cloud(
+            key,
+            dataset_dir,
+        )
+        self._loaded[key] = True
+        self.original_button.setEnabled(
+            self._loaded["original"]
+        )
+        self.classified_button.setEnabled(
+            self._loaded["classified"]
+        )
+        self.both_button.setEnabled(
+            self._loaded["original"]
+            and self._loaded["classified"]
+        )
+        script = (
+            "window.LASViewer.loadCloud("
+            + json.dumps(key)
+            + ","
+            + json.dumps(url)
+            + ","
+            + json.dumps(title)
+            + ","
+            + ("true" if classified else "false")
+            + ","
+            + ("true" if activate else "false")
+            + ");"
+        )
+        self._run_js(script)
+
+    def set_view_mode(self, mode: str) -> None:
+        if mode not in {
+            "original",
+            "classified",
+            "both",
+        }:
+            return
+        self._run_js(
+            "window.LASViewer.setViewMode("
+            + json.dumps(mode)
+            + ");"
+        )
+
+    def set_material_mode(self, mode: str) -> None:
+        if mode not in {
+            "rgb",
+            "elevation",
+            "classification",
+        }:
+            return
+        self._run_js(
+            "window.LASViewer.setMaterialMode("
+            + json.dumps(mode)
+            + ");"
+        )
+
+    def clear(self) -> None:
+        self._loaded = {
+            "original": False,
+            "classified": False,
+        }
+        self.original_button.setEnabled(False)
+        self.classified_button.setEnabled(False)
+        self.both_button.setEnabled(False)
+        self._run_js("window.LASViewer.clear();")
+
+    def shutdown(self) -> None:
+        self.server.stop()

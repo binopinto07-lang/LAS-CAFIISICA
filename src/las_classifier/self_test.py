@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 import traceback
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,6 +17,11 @@ from .cloud.loader import (
     load_cloud,
 )
 from .cloud.statistics import calculate_statistics
+from .viewer.paths import (
+    converter_executable,
+    potree_root,
+    viewer_root,
+)
 
 
 REPORT_NAME = "LAS_CAFIISICA_SELF_TEST.txt"
@@ -25,9 +31,16 @@ def _ok(lines: list[str], key: str) -> None:
     lines.append(f"{key}=OK")
 
 
-def run_self_test(output_dir: str | Path | None = None) -> int:
-    destination = Path(output_dir or Path.cwd()).resolve()
-    destination.mkdir(parents=True, exist_ok=True)
+def run_self_test(
+    output_dir: str | Path | None = None,
+) -> int:
+    destination = Path(
+        output_dir or Path.cwd()
+    ).resolve()
+    destination.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
     report_path = destination / REPORT_NAME
     lines = [
         "LAS-CAFIISICA SELF TEST",
@@ -36,10 +49,14 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
     ]
 
     try:
-        import scipy  # noqa: F401
+        import scipy
         import laspy
-        import pyproj  # noqa: F401
-        import PySide6  # noqa: F401
+        import pyproj
+        import PySide6
+        from PySide6 import (
+            QtWebEngineCore,
+            QtWebEngineWidgets,
+        )
 
         _ok(lines, "PYTHON")
         _ok(lines, "NUMPY")
@@ -49,6 +66,7 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
         importlib.import_module("lazrs")
         _ok(lines, "LAZ")
         _ok(lines, "PYSIDE6")
+        _ok(lines, "QTWEBENGINE")
 
         if not IGNORE_INPUT_CLASSIFICATION:
             raise RuntimeError(
@@ -60,6 +78,35 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
             )
         _ok(lines, "WORKING_CRS_EPSG_3763")
 
+        viewer_files = [
+            viewer_root() / "index.html",
+            viewer_root() / "app.js",
+            viewer_root() / "styles.css",
+        ]
+        if not all(path.is_file() for path in viewer_files):
+            raise RuntimeError(
+                "Viewer source assets are missing"
+            )
+        _ok(lines, "VIEWER_ASSETS")
+
+        if getattr(sys, "frozen", False):
+            potree_js = (
+                potree_root()
+                / "build"
+                / "potree"
+                / "potree.js"
+            )
+            if not potree_js.is_file():
+                raise RuntimeError(
+                    f"Potree runtime missing: {potree_js}"
+                )
+            if not converter_executable().is_file():
+                raise RuntimeError(
+                    "PotreeConverter runtime missing"
+                )
+            _ok(lines, "POTREE")
+            _ok(lines, "POTREE_CONVERTER")
+
         with TemporaryDirectory(
             prefix="las_cafiisica_selftest_"
         ) as tmp:
@@ -69,9 +116,15 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
                 version="1.2",
             )
             las = laspy.LasData(header)
-            las.x = np.array([0.0, 1.0, 2.0, 3.0])
-            las.y = np.array([0.0, 1.0, 0.0, 1.0])
-            las.z = np.array([10.0, 10.5, 11.0, 11.5])
+            las.x = np.array(
+                [0.0, 1.0, 2.0, 3.0]
+            )
+            las.y = np.array(
+                [0.0, 1.0, 0.0, 1.0]
+            )
+            las.z = np.array(
+                [10.0, 10.5, 11.0, 11.5]
+            )
             las.classification = np.array(
                 [5, 2, 1, 7],
                 dtype=np.uint8,
@@ -105,9 +158,14 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
             _ok(lines, "READ_LAS")
             _ok(lines, "READ_LAZ")
             _ok(lines, "ORIGINAL_CLASS")
-            _ok(lines, "IGNORE_INPUT_CLASSIFICATION")
+            _ok(
+                lines,
+                "IGNORE_INPUT_CLASSIFICATION",
+            )
 
-            stats = calculate_statistics(cloud_las)
+            stats = calculate_statistics(
+                cloud_las
+            )
             if (
                 stats.point_count != 4
                 or stats.height_range != 1.5
@@ -128,27 +186,38 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
                 ),
             )
             if smrf.point_count != 4:
-                raise RuntimeError("SMRF self-test failed")
+                raise RuntimeError(
+                    "SMRF self-test failed"
+                )
             _ok(lines, "SMRF")
 
-            classified_path = temp / "classified.las"
+            classified_path = (
+                temp / "classified.las"
+            )
             export_classified(
                 las_path,
                 classified_path,
                 smrf.model,
             )
-            exported = laspy.read(classified_path)
-            exported_crs = exported.header.parse_crs()
+            exported = laspy.read(
+                classified_path
+            )
+            exported_crs = (
+                exported.header.parse_crs()
+            )
             if (
                 exported_crs is None
-                or exported_crs.to_epsg() != 3763
+                or exported_crs.to_epsg()
+                != 3763
             ):
                 raise RuntimeError(
                     "Classified export CRS self-test failed"
                 )
             _ok(lines, "CLASSIFIED_EXPORT")
 
-        lines.extend(["", "RESULT=PASS"])
+        lines.extend(
+            ["", "RESULT=PASS"]
+        )
         report_path.write_text(
             "\n".join(lines) + "\n",
             encoding="utf-8",
@@ -156,7 +225,12 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
         return 0
     except Exception:
         lines.extend(
-            ["", "RESULT=FAIL", "", traceback.format_exc()]
+            [
+                "",
+                "RESULT=FAIL",
+                "",
+                traceback.format_exc(),
+            ]
         )
         report_path.write_text(
             "\n".join(lines),
