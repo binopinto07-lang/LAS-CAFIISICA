@@ -58,6 +58,13 @@ def test_ground_only_export_contains_only_class_2_and_preserves_crs(tmp_path):
     assert np.all(classes == 2)
     assert exported.header.parse_crs() is not None
     assert exported.header.parse_crs().to_epsg() == 3763
+    names = set(exported.point_format.dimension_names)
+    assert "GroundConfidence" in names
+    assert "GroundSource" in names
+    assert "InterpolationDistance" in names
+    assert "GroundMethod" in names
+    confidence = np.asarray(exported["GroundConfidence"])
+    assert np.all((confidence >= 0.0) & (confidence <= 1.0))
     assert len(exported.points) <= (
         len(las.points) + result.synthetic_fill_point_count
     )
