@@ -9,23 +9,23 @@
     {
       "id": "python",
       "name": "Python 3.12",
-      "command": "$v = python --version 2>&1; Write-Output $v; if ($v -notmatch 'Python 3\\.12\\.') { exit 1 }",
+      "command": "$candidates=@(); if (Get-Command py -ErrorAction SilentlyContinue) { $candidates += @{Label='py -3.12'; Cmd='py'} }; $lbm=Join-Path $env:LOCALAPPDATA 'LBM\\m\\Scripts\\python.exe'; if (Test-Path $lbm) { $candidates += @{Label='LBM Python'; Cmd=$lbm} }; if (Get-Command python -ErrorAction SilentlyContinue) { $candidates += @{Label='python'; Cmd='python'} }; foreach ($c in $candidates) {   try {     if ($c.Label -eq 'py -3.12') { $v=& $c.Cmd -3.12 --version 2>&1 } else { $v=& $c.Cmd --version 2>&1 };     $text=($v | Out-String).Trim();     if ($LASTEXITCODE -eq 0 -and $text -match '^Python 3\\.12\\.') { Write-Output ($c.Label + ': ' + $text); exit 0 }   } catch {} }; Write-Error 'Python 3.12 não encontrado via py -3.12, ambiente do LBM ou python.'; exit 1",
       "required": true,
-      "hint": "Instalar Python 3.12 e adicionar ao PATH."
+      "hint": "O pipeline necessita Python 3.12. O perfil aceita py -3.12 ou o Python já usado pelo próprio Local Build Manager."
     },
     {
       "id": "git",
-      "name": "Git",
-      "command": "git --version",
-      "required": true,
-      "hint": "Instalar Git for Windows."
+      "name": "Git (opcional para ZIP)",
+      "command": "if (Get-Command git -ErrorAction SilentlyContinue) { git --version; exit $LASTEXITCODE }; Write-Output 'Git não instalado — OK para pasta extraída do ZIP. Git Pull ficará indisponível.'; exit 0",
+      "required": false,
+      "hint": "Git só é necessário para Git Pull/clone. TEST e BUILD funcionam numa pasta ZIP válida."
     },
     {
       "id": "powershell",
       "name": "PowerShell",
       "command": "$PSVersionTable.PSVersion.ToString()",
       "required": true,
-      "hint": "Incluido no Windows."
+      "hint": "Incluído no Windows."
     }
   ],
   "pipelines": {
@@ -197,7 +197,7 @@
     ]
   },
   "release": {},
-  "config_revision": 1,
+  "config_revision": 2,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
