@@ -17,6 +17,7 @@ from ..ground.gap_reconstruction import (
     iter_triangle_fill,
 )
 from ..ground.ground_confidence import ground_confidence
+from ..ground.height_above_ground import hag_confidence
 from ..ground.ground_seeds import (
     lowest_candidates,
     select_multiscale_seeds,
@@ -180,6 +181,28 @@ class AdaptivePTDModel:
             discontinuity=discontinuity,
             normal_alignment=alignment,
         )
+
+        # Height-above-ground is evaluated against the final TIN rather than a
+        # raster DEM. This gives a strong vegetation veto even on steep faces,
+        # while point-to-plane distance still protects genuine talude points.
+        hag_limit = max(
+            0.22,
+            min(
+                0.55,
+                self.analysis.median_spacing * 5.0,
+            ),
+        )
+        hscore = hag_confidence(
+            metrics["vertical_residual"],
+            positive_limit=hag_limit,
+            negative_limit=hag_limit * 1.8,
+        )
+        confidence = 0.76 * confidence + 0.24 * hscore
+        high_above = (
+            metrics["vertical_residual"]
+            > hag_limit * 1.35
+        )
+        confidence[high_above] *= 0.15
         confidence[~valid] = 0.0
 
         # Large unsupported triangles are deliberately not trusted. This is
