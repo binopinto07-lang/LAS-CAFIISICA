@@ -5,6 +5,8 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
+from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -12,12 +14,28 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from .server import ViewerServer
 
 
 LOGGER = logging.getLogger("las_cafiisica.viewer.widget")
+
+
+class LoggingWebPage(QWebEnginePage):
+    def javaScriptConsoleMessage(
+        self,
+        level,
+        message: str,
+        line_number: int,
+        source_id: str,
+    ) -> None:
+        LOGGER.info(
+            "JS_CONSOLE level=%s source=%s line=%s message=%s",
+            level,
+            source_id,
+            line_number,
+            message,
+        )
 
 
 class PointCloudViewer(QWidget):
@@ -38,9 +56,7 @@ class PointCloudViewer(QWidget):
         self.fit_button = QPushButton("ENQUADRAR")
         self.rgb_button = QPushButton("RGB")
         self.elevation_button = QPushButton("ELEVAÇÃO")
-        self.class_mode_button = QPushButton(
-            "CLASSIFICAÇÃO"
-        )
+        self.class_mode_button = QPushButton("CLASSIFICAÇÃO")
 
         self.original_button.setEnabled(False)
         self.classified_button.setEnabled(False)
@@ -56,22 +72,16 @@ class PointCloudViewer(QWidget):
             lambda: self.set_view_mode("both")
         )
         self.fit_button.clicked.connect(
-            lambda: self._run_js(
-                "window.LASViewer.fit();"
-            )
+            lambda: self._run_js("window.LASViewer.fit();")
         )
         self.rgb_button.clicked.connect(
             lambda: self.set_material_mode("rgb")
         )
         self.elevation_button.clicked.connect(
-            lambda: self.set_material_mode(
-                "elevation"
-            )
+            lambda: self.set_material_mode("elevation")
         )
         self.class_mode_button.clicked.connect(
-            lambda: self.set_material_mode(
-                "classification"
-            )
+            lambda: self.set_material_mode("classification")
         )
 
         toolbar = QHBoxLayout()
@@ -86,9 +96,8 @@ class PointCloudViewer(QWidget):
         toolbar.addWidget(self.class_mode_button)
 
         self.web = QWebEngineView(self)
-        self.web.loadFinished.connect(
-            self._on_load_finished
-        )
+        self.web.setPage(LoggingWebPage(self.web))
+        self.web.loadFinished.connect(self._on_load_finished)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -97,15 +106,11 @@ class PointCloudViewer(QWidget):
 
         self.web.load(QUrl(self.server.app_url))
 
-    def _on_load_finished(
-        self,
-        ok: bool,
-    ) -> None:
+    def _on_load_finished(self, ok: bool) -> None:
         self._page_ready = bool(ok)
+        LOGGER.info("VIEWER_PAGE_READY=%s", ok)
         if not ok:
-            LOGGER.error(
-                "Potree viewer HTML failed to load"
-            )
+            LOGGER.error("Potree viewer HTML failed to load")
             return
         scripts = self._pending_scripts
         self._pending_scripts = []
@@ -126,17 +131,16 @@ class PointCloudViewer(QWidget):
         classified: bool,
         activate: bool = True,
     ) -> None:
-        url = self.server.register_cloud(
+        url = self.server.register_cloud(key, dataset_dir)
+        LOGGER.info(
+            "VIEWER_LOAD key=%s url=%s classified=%s",
             key,
-            dataset_dir,
+            url,
+            classified,
         )
         self._loaded[key] = True
-        self.original_button.setEnabled(
-            self._loaded["original"]
-        )
-        self.classified_button.setEnabled(
-            self._loaded["classified"]
-        )
+        self.original_button.setEnabled(self._loaded["original"])
+        self.classified_button.setEnabled(self._loaded["classified"])
         self.both_button.setEnabled(
             self._loaded["original"]
             and self._loaded["classified"]
@@ -157,11 +161,7 @@ class PointCloudViewer(QWidget):
         self._run_js(script)
 
     def set_view_mode(self, mode: str) -> None:
-        if mode not in {
-            "original",
-            "classified",
-            "both",
-        }:
+        if mode not in {"original", "classified", "both"}:
             return
         self._run_js(
             "window.LASViewer.setViewMode("
@@ -170,11 +170,7 @@ class PointCloudViewer(QWidget):
         )
 
     def set_material_mode(self, mode: str) -> None:
-        if mode not in {
-            "rgb",
-            "elevation",
-            "classification",
-        }:
+        if mode not in {"rgb", "elevation", "classification"}:
             return
         self._run_js(
             "window.LASViewer.setMaterialMode("
