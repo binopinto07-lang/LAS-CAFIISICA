@@ -176,11 +176,22 @@ def _adaptive_settings(
         params.gap_max_size,
         candidate_spacing * 10.0,
     )
-    synthetic_spacing = (
-        params.synthetic_spacing
-        if params.synthetic_spacing > 0
-        else max(0.10, min(0.50, spacing * 2.5))
-    )
+    if params.synthetic_spacing > 0:
+        synthetic_spacing = params.synthetic_spacing
+    else:
+        # Match reconstruction density to the selected quality. The previous
+        # fixed ~2.5x point spacing looked closed in the downsampled Potree
+        # preview but sparse/open beside the full-resolution exported cloud.
+        spacing_factor = {
+            "fast": 2.5,
+            "balanced": 2.0,
+            "high": 1.5,
+            "extreme": 1.25,
+        }.get(params.quality, 2.0)
+        synthetic_spacing = max(
+            0.05,
+            min(0.30, spacing * spacing_factor),
+        )
     return (
         seed_resolution,
         candidate_spacing,
@@ -266,6 +277,23 @@ class AdaptivePTDModel:
             known = np.isfinite(alignment)
             suspicious = known & (alignment < 0.60)
             confidence[suspicious] *= 0.35
+
+        # Hard near-ground rule requested for the final terrain product:
+        # a measured return that is within 10 cm of the reconstructed local
+        # terrain is ground, even when photogrammetric normals are noisy.
+        # We still require a valid, supported TIN facet so this rule cannot
+        # bridge a large unknown gap or extrapolate outside the terrain.
+        near_ground = (
+            valid
+            & np.isfinite(metrics["vertical_residual"])
+            & (np.abs(metrics["vertical_residual"]) <= 0.10)
+            & (metrics["plane_distance"] <= 0.10)
+            & (metrics["max_edge"] <= self.max_triangle_edge)
+        )
+        confidence[near_ground] = np.maximum(
+            confidence[near_ground],
+            0.98,
+        )
 
         return confidence, metrics
 

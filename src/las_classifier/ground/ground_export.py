@@ -191,6 +191,25 @@ def _synthetic_record(
     if "number_of_returns" in names:
         points.number_of_returns = np.ones(count, dtype=np.uint8)
 
+    # Reconstructed ground must remain visible in generic LAS viewers that
+    # default to RGB or intensity instead of classification. Zero-valued
+    # synthetic RGB/intensity rendered as black and looked like open holes.
+    if "intensity" in names:
+        points.intensity = np.full(
+            count,
+            32768,
+            dtype=np.uint16,
+        )
+    if {"red", "green", "blue"}.issubset(names):
+        neutral = np.full(
+            count,
+            32768,
+            dtype=np.uint16,
+        )
+        points.red = neutral
+        points.green = neutral
+        points.blue = neutral
+
     return points
 
 

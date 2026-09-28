@@ -121,3 +121,7 @@ def test_exported_reconstructed_ground_is_visible_to_generic_las_viewers(tmp_pat
     assert int(np.count_nonzero(reconstructed)) == 2
     assert np.all(np.asarray(exported.classification)[reconstructed] == 2)
     assert np.all(np.asarray(exported.synthetic)[reconstructed] == 0)
+    assert np.all(np.asarray(exported.intensity)[reconstructed] > 0)
+    assert np.all(np.asarray(exported.red)[reconstructed] > 0)
+    assert np.all(np.asarray(exported.green)[reconstructed] > 0)
+    assert np.all(np.asarray(exported.blue)[reconstructed] > 0)
