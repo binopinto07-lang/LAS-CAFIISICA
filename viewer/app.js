@@ -6,6 +6,7 @@
     clouds: new Map(),
     viewMode: "original",
     materialMode: "rgb",
+    autoFitted: false,
   };
 
   const status = (text) => {
@@ -226,7 +227,10 @@
           setMaterialMode("rgb");
         }
 
-        fitRepeatedly();
+        if (!state.autoFitted) {
+          fitRepeatedly();
+          state.autoFitted = true;
+        }
         status(name + " · LOD dinâmico · pontos a carregar");
       } catch (error) {
         console.error("[LASViewer] loadCloud failed", error);
@@ -248,7 +252,10 @@
     if (mode === "classified") {
       setMaterialMode("classification");
     }
-    fitRepeatedly();
+
+    // Switching Original / Final Ground / Compare must never move the camera.
+    // The same eye position, target, rotation and zoom are kept so differences
+    // are inspected at exactly the same location.
   }
 
   function fit() {
@@ -262,6 +269,7 @@
     );
     state.viewMode = "original";
     state.materialMode = "rgb";
+    state.autoFitted = false;
     status("Abra uma nuvem LAS / LAZ");
   }
 

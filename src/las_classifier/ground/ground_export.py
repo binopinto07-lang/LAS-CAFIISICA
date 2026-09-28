@@ -136,6 +136,8 @@ def _synthetic_record(
     x: np.ndarray,
     y: np.ndarray,
     z: np.ndarray,
+    *,
+    mark_las_synthetic: bool = True,
 ) -> laspy.ScaleAwarePointRecord:
     count = int(x.size)
     points = laspy.ScaleAwarePointRecord.zeros(
@@ -169,8 +171,18 @@ def _synthetic_record(
             dtype=np.float32,
         )
 
+    # The Potree preview may retain the LAS synthetic bit because our viewer
+    # renders it explicitly. The final exported Ground Only cloud deliberately
+    # leaves the LAS synthetic bit clear: several third-party LAS viewers hide
+    # synthetic returns by default, which made reconstructed gaps look open
+    # even though the points were physically present. Provenance is preserved
+    # losslessly in GroundSource=2 and GroundMethod.
     try:
-        points.synthetic = np.ones(count, dtype=np.uint8)
+        points.synthetic = np.full(
+            count,
+            1 if mark_las_synthetic else 0,
+            dtype=np.uint8,
+        )
     except Exception:
         LOGGER.warning("SYNTHETIC_FLAG_UNAVAILABLE")
 
@@ -321,6 +333,7 @@ def export_ground_only(
                                 np.asarray(x, dtype=np.float64),
                                 np.asarray(y, dtype=np.float64),
                                 np.asarray(z, dtype=np.float64),
+                                mark_las_synthetic=False,
                             )
                             names = set(
                                 header.point_format.dimension_names
@@ -372,6 +385,10 @@ def export_ground_only(
     LOGGER.info("GROUND_REAL=%d", real_ground)
     LOGGER.info("SYNTHETIC_POINTS=%d", synthetic_written)
     LOGGER.info("GROUND_FINAL=%d", real_ground + synthetic_written)
+    LOGGER.info(
+        "GROUND_EXPORT_RECONSTRUCTED_VISIBLE=%s",
+        bool(include_synthetic and synthetic_written),
+    )
     if progress is not None:
         progress(100, "Ground-only export complete")
     return output

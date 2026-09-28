@@ -68,3 +68,56 @@ def test_ground_only_export_contains_only_class_2_and_preserves_crs(tmp_path):
     assert len(exported.points) <= (
         len(las.points) + result.synthetic_fill_point_count
     )
+
+
+def test_exported_reconstructed_ground_is_visible_to_generic_las_viewers(tmp_path):
+    source = tmp_path / "input_visible_fill.las"
+    header = laspy.LasHeader(point_format=3, version="1.2")
+    header.add_crs(CRS.from_epsg(3763))
+    las = laspy.LasData(header)
+    las.x = np.array([0.0, 1.0, 0.0])
+    las.y = np.array([0.0, 0.0, 1.0])
+    las.z = np.array([10.0, 10.0, 10.0])
+    las.classification = np.zeros(3, dtype=np.uint8)
+    las.write(source)
+
+    class Params:
+        chunk_size = 100
+
+    class Model:
+        params = Params()
+        engine_name = "Hybrid"
+        synthetic_fill_point_count = 2
+        effective_fill_spacing = 0.25
+
+        @staticmethod
+        def classify_points(points, x, y, z):
+            return np.full(x.size, 2, dtype=np.uint8)
+
+        @staticmethod
+        def confidence_points(points, x, y, z):
+            return np.ones(x.size, dtype=np.float32)
+
+        @staticmethod
+        def iter_synthetic_fill_xyz():
+            yield (
+                np.array([0.25, 0.50], dtype=np.float64),
+                np.array([0.25, 0.50], dtype=np.float64),
+                np.array([10.0, 10.0], dtype=np.float64),
+            )
+
+    output = tmp_path / "visible_fill.las"
+    export_ground_only(
+        source,
+        output,
+        Model(),
+        include_synthetic=True,
+    )
+
+    exported = laspy.read(output)
+    ground_source = np.asarray(exported["GroundSource"])
+    reconstructed = ground_source == 2
+
+    assert int(np.count_nonzero(reconstructed)) == 2
+    assert np.all(np.asarray(exported.classification)[reconstructed] == 2)
+    assert np.all(np.asarray(exported.synthetic)[reconstructed] == 0)
