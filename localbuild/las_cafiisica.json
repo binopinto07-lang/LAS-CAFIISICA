@@ -213,7 +213,7 @@
     ]
   },
   "release": {},
-  "config_revision": 12,
+  "config_revision": 13,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -239,11 +239,12 @@
     "viewer/app.js",
     "viewer/styles.css",
     "scripts/bootstrap_viewer_vendor.ps1",
-    "tests/test_viewer_server.py"
+    "tests/test_viewer_server.py",
+    "tests/test_viewer_converter.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R11"
+    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R12"
   },
   "auto_bootstrap_python": true
 }
