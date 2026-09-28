@@ -171,10 +171,10 @@ def run_csf(
     surface[~np.isfinite(surface)] = np.nan
     surface = _nearest_fill(surface)
 
-    # Cloth-like relaxation on the original-Z lower envelope. The cloth can
-    # sag below an isolated high object but is not allowed to rise above the
-    # observed lower envelope. This is intentionally independent of PTD and is
-    # used as a second opinion in Hybrid mode.
+    # Cloth-like relaxation in original Z coordinates. This is equivalent
+    # to dropping a cloth onto the inverted cloud: here the cloth starts below
+    # the terrain, moves upward, is smoothed by springs, and is never allowed
+    # to pass above the observed lower envelope.
     kernel = np.array(
         [
             [0.0, 0.25, 0.0],
@@ -183,12 +183,22 @@ def run_csf(
         ],
         dtype=np.float32,
     )
-    cloth = surface.copy()
-    iterations = 80 if params.quality in {"high", "extreme"} else 45
-    rigidity = 0.65
+    iterations = 90 if params.quality in {"high", "extreme"} else 55
+    z_min = float(np.min(surface))
+    z_max = float(np.max(surface))
+    cloth = np.full_like(
+        surface,
+        z_min - max(1.0, resolution * 2.0),
+    )
+    gravity_step = max(
+        0.05,
+        (z_max - z_min + 2.0) / max(1, iterations),
+    )
+    rigidity = 0.72
     for iteration in range(iterations):
-        smooth = convolve(cloth, kernel, mode="nearest")
-        candidate = rigidity * cloth + (1.0 - rigidity) * smooth
+        lifted = cloth + gravity_step
+        smooth = convolve(lifted, kernel, mode="nearest")
+        candidate = rigidity * lifted + (1.0 - rigidity) * smooth
         cloth = np.minimum(candidate, surface)
         if iteration % 10 == 0:
             _emit(
