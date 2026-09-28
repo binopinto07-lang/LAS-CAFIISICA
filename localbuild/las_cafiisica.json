@@ -9,9 +9,9 @@
     {
       "id": "python",
       "name": "Python 3.12",
-      "command": "$candidates=@(); if (Get-Command py -ErrorAction SilentlyContinue) { $candidates += @{Label='py -3.12'; Cmd='py'} }; $lbm=Join-Path $env:LOCALAPPDATA 'LBM\\m\\Scripts\\python.exe'; if (Test-Path $lbm) { $candidates += @{Label='LBM Python'; Cmd=$lbm} }; if (Get-Command python -ErrorAction SilentlyContinue) { $candidates += @{Label='python'; Cmd='python'} }; foreach ($c in $candidates) {   try {     if ($c.Label -eq 'py -3.12') { $v=& $c.Cmd -3.12 --version 2>&1 } else { $v=& $c.Cmd --version 2>&1 };     $text=($v | Out-String).Trim();     if ($LASTEXITCODE -eq 0 -and $text -match '^Python 3\\.12\\.') { Write-Output ($c.Label + ': ' + $text); exit 0 }   } catch {} }; Write-Error 'Python 3.12 não encontrado via py -3.12, ambiente do LBM ou python.'; exit 1",
+      "command": "@lbm:python312",
       "required": true,
-      "hint": "O pipeline necessita Python 3.12. O perfil aceita py -3.12 ou o Python já usado pelo próprio Local Build Manager."
+      "hint": "Local Build Manager V0.1.9+ instala automaticamente um Python 3.12 privado se necessário."
     },
     {
       "id": "git",
@@ -197,7 +197,7 @@
     ]
   },
   "release": {},
-  "config_revision": 2,
+  "config_revision": 3,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -211,6 +211,7 @@
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R1"
-  }
+    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R2"
+  },
+  "auto_bootstrap_python": true
 }
