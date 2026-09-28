@@ -731,9 +731,14 @@ def run_smrf(
         header.maxs[1]
     )
 
+    # Grid dimensions must match the cells that can actually contain input
+    # points. ceil(extent / cell) + 1 creates an artificial empty strip when
+    # the maximum coordinate falls inside a partial final cell (for example
+    # 20.5 m with 1 m cells). That strip deforms the inpainted terrain and
+    # causes false non-ground classifications along steep raster borders.
     cols = max(
         1,
-        int(ceil(
+        int(floor(
             (max_x - min_x)
             / params.cell
         ))
@@ -741,7 +746,7 @@ def run_smrf(
     )
     rows = max(
         1,
-        int(ceil(
+        int(floor(
             (max_y - min_y)
             / params.cell
         ))
@@ -762,7 +767,7 @@ def run_smrf(
     LOGGER.info(
         "SMRF_START points=%d cell=%s slope=%s window=%s "
         "threshold=%s scalar=%s fill_spacing=%s grid=%dx%d "
-        "algorithm=PINGEL_R3_EDGE_SAFE",
+        "algorithm=PINGEL_R4_GRID_SAFE",
         cloud.point_count,
         params.cell,
         params.slope,
