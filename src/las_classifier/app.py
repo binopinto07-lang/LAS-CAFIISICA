@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication
     from .main_window import MainWindow
 
-    app = QApplication.instance() or QApplication(sys.argv)
+    app = QApplication.instance() or QApplication([sys.argv[0]])
     window = MainWindow()
     window.show()
     return app.exec()
