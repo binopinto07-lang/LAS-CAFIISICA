@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "las-cafiisica"
-version = "0.3.1.dev0"
+version = "0.3.2.dev0"
 description = "Desktop LAS/LAZ ground classification with Potree viewport"
 readme = "README.md"
 requires-python = ">=3.12"
