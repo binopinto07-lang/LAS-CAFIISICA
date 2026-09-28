@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from math import ceil, floor, sqrt
 from time import perf_counter
@@ -18,6 +18,11 @@ from scipy.ndimage import (
 )
 
 from ..cloud.model import CloudModel
+from .terrain3d import (
+    Terrain3DParams,
+    Terrain3DRefinement,
+    build_terrain3d_refinement,
+)
 
 
 LOGGER = logging.getLogger("las_cafiisica.classifiers.smrf")
@@ -40,6 +45,11 @@ class SMRFParams:
     max_fill_points: int = 8_000_000
     inpaint_iterations: int = 300
     inpaint_tolerance: float = 0.001
+    terrain3d_enabled: bool = True
+    terrain3d_voxel: float = 0.50
+    terrain3d_surface_thickness: float = 0.22
+    terrain3d_coherence: float = 0.62
+    terrain3d_max_normal_angle_deg: float = 88.0
 
     def validate(self) -> None:
         if self.cell <= 0:
@@ -64,6 +74,16 @@ class SMRFParams:
             raise ValueError("SMRF inpaint_iterations must be positive")
         if self.inpaint_tolerance <= 0:
             raise ValueError("SMRF inpaint_tolerance must be positive")
+        if self.terrain3d_voxel <= 0:
+            raise ValueError("terrain3d_voxel must be positive")
+        if self.terrain3d_surface_thickness <= 0:
+            raise ValueError("terrain3d_surface_thickness must be positive")
+        if not 0.0 < self.terrain3d_coherence <= 1.0:
+            raise ValueError("terrain3d_coherence must be in (0, 1]")
+        if not 0.0 < self.terrain3d_max_normal_angle_deg < 90.0:
+            raise ValueError(
+                "terrain3d_max_normal_angle_deg must be in (0, 90)"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +98,7 @@ class SMRFModel:
     object_cell_mask: NDArray[np.bool_]
     inpaint_cell_mask: NDArray[np.bool_]
     fill_cell_mask: NDArray[np.bool_]
+    terrain3d: Terrain3DRefinement | None = None
 
     def _grid_coordinates(
         self,
@@ -168,6 +189,40 @@ class SMRFModel:
             ground[rebuilt] &= (
                 vertical_residual[rebuilt]
                 <= self.params.threshold
+            )
+
+        if self.terrain3d is not None:
+            terrain3d_ground = self.terrain3d.ground_mask(
+                x,
+                y,
+                z,
+            )
+
+            # Keep only extremely reliable 2.5D ground outside the 3D grown
+            # surface. Steep talude faces are decided by the 3D surface model,
+            # while flat measured terrain remains safe even where normals are
+            # sparse or missing.
+            stable_base = (
+                ground
+                & (~rebuilt)
+                & (
+                    local_slope
+                    <= max(
+                        self.params.slope * 2.0,
+                        0.30,
+                    )
+                )
+                & (
+                    vertical_residual
+                    <= min(
+                        self.params.threshold * 0.65,
+                        0.35,
+                    )
+                )
+            )
+            ground = (
+                terrain3d_ground
+                | stable_base
             )
 
         classes = np.full(
@@ -311,6 +366,8 @@ class SMRFResult:
     object_cell_count: int
     inpainted_cell_count: int
     synthetic_fill_point_count: int
+    terrain3d_voxel_count: int = 0
+    terrain3d_seed_voxel_count: int = 0
 
     @property
     def point_count(self) -> int:
@@ -767,7 +824,7 @@ def run_smrf(
     LOGGER.info(
         "SMRF_START points=%d cell=%s slope=%s window=%s "
         "threshold=%s scalar=%s fill_spacing=%s grid=%dx%d "
-        "algorithm=PINGEL_R4_GRID_SAFE",
+        "algorithm=SMRF_PLUS_TERRAIN3D_R1",
         cloud.point_count,
         params.cell,
         params.slope,
@@ -891,7 +948,7 @@ def run_smrf(
         | object_cells
     )
 
-    model = SMRFModel(
+    base_model = SMRFModel(
         params=params,
         min_x=min_x,
         min_y=min_y,
@@ -904,6 +961,29 @@ def run_smrf(
         fill_cell_mask=fill_cells,
     )
 
+    terrain3d = None
+    if params.terrain3d_enabled:
+        terrain3d = build_terrain3d_refinement(
+            cloud,
+            base_model,
+            progress,
+            Terrain3DParams(
+                voxel=params.terrain3d_voxel,
+                surface_thickness=(
+                    params.terrain3d_surface_thickness
+                ),
+                coherence=params.terrain3d_coherence,
+                max_normal_angle_deg=(
+                    params.terrain3d_max_normal_angle_deg
+                ),
+            ),
+        )
+
+    model = replace(
+        base_model,
+        terrain3d=terrain3d,
+    )
+
     LOGGER.info(
         "SMRF_FILL cells=%d points=%d spacing=%.4f",
         model.fill_cell_count,
@@ -912,8 +992,12 @@ def run_smrf(
     )
     _emit(
         progress,
-        64,
-        "SMRF rebuilt terrain ready",
+        86 if terrain3d is not None else 64,
+        (
+            "SMRF + 3D terrain ready"
+            if terrain3d is not None
+            else "SMRF rebuilt terrain ready"
+        ),
     )
 
     ground_count = 0
@@ -938,11 +1022,20 @@ def run_smrf(
         _emit(
             progress,
             (
-                64
-                + int(
-                    36
-                    * stop
-                    / total
+                (
+                    86
+                    + int(
+                        14
+                        * stop
+                        / total
+                    )
+                    if terrain3d is not None
+                    else 64
+                    + int(
+                        36
+                        * stop
+                        / total
+                    )
                 )
             ),
             (
@@ -992,17 +1085,28 @@ def run_smrf(
         synthetic_fill_point_count=(
             model.synthetic_fill_point_count
         ),
+        terrain3d_voxel_count=(
+            terrain3d.terrain_voxel_count
+            if terrain3d is not None
+            else 0
+        ),
+        terrain3d_seed_voxel_count=(
+            terrain3d.seed_voxels
+            if terrain3d is not None
+            else 0
+        ),
     )
 
     LOGGER.info(
         "SMRF_RASTER empty=%d interior_empty=%d low_outlier=%d "
-        "object=%d inpainted=%d synthetic_fill=%d",
+        "object=%d inpainted=%d synthetic_fill=%d terrain3d=%d",
         result.empty_cell_count,
         result.interior_empty_cell_count,
         result.low_outlier_cell_count,
         result.object_cell_count,
         result.inpainted_cell_count,
         result.synthetic_fill_point_count,
+        result.terrain3d_voxel_count,
     )
     LOGGER.info(
         "SMRF_DONE ground=%d non_ground=%d elapsed=%.3fs",

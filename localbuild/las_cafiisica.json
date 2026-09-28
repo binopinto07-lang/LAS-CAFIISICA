@@ -213,7 +213,7 @@
     ]
   },
   "release": {},
-  "config_revision": 13,
+  "config_revision": 14,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -240,11 +240,13 @@
     "viewer/styles.css",
     "scripts/bootstrap_viewer_vendor.ps1",
     "tests/test_viewer_server.py",
-    "tests/test_viewer_converter.py"
+    "tests/test_viewer_converter.py",
+    "src/las_classifier/classifiers/terrain3d.py",
+    "tests/test_terrain3d.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R12"
+    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R13"
   },
   "auto_bootstrap_python": true
 }

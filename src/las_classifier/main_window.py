@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         )
 
         smrf_box = QGroupBox(
-            "GROUND CLASSIFICATION — SMRF"
+            "GROUND CLASSIFICATION — SMRF + 3D"
         )
         form = QFormLayout()
         self.cell_spin = self._spin(
@@ -105,7 +105,7 @@ class MainWindow(QMainWindow):
 
         buttons = QHBoxLayout()
         self.smrf_button = QPushButton(
-            "CLASSIFY GROUND — SMRF"
+            "CLASSIFY GROUND — SMRF + 3D"
         )
         self.smrf_button.setEnabled(False)
         self.smrf_button.clicked.connect(self.run_smrf)
@@ -427,6 +427,14 @@ class MainWindow(QMainWindow):
                     f"Threshold: {p.threshold:.2f} m",
                     f"Scalar: {p.scalar:.2f}",
                     (
+                        "3D terrain voxels: "
+                        f"{result.terrain3d_voxel_count:,}"
+                    ),
+                    (
+                        "3D seed voxels: "
+                        f"{result.terrain3d_seed_voxel_count:,}"
+                    ),
+                    (
                         "Synthetic ground fill: "
                         f"{result.synthetic_fill_point_count:,} pts"
                     ),
@@ -442,7 +450,7 @@ class MainWindow(QMainWindow):
             )
         )
         self.statusBar().showMessage(
-            "SMRF classification complete"
+            "SMRF + 3D classification complete"
         )
 
     def _smrf_failed(self, message: str) -> None:
