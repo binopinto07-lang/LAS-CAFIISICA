@@ -112,6 +112,88 @@
         "category": "package",
         "venv": "build"
       }
+    ],
+    "full": [
+      {
+        "id": "deps-test",
+        "name": "Instalar dependencias de teste",
+        "command": "& '%PYTHON%' -m pip install --upgrade pip; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '%PYTHON%' -m pip install -e '.[dev]'",
+        "timeout_minutes": 30,
+        "category": "setup",
+        "venv": "test"
+      },
+      {
+        "id": "compile",
+        "name": "Compilar fontes Python",
+        "command": "& '%PYTHON%' -m compileall -q src app scripts tests",
+        "timeout_minutes": 10,
+        "category": "test",
+        "venv": "test"
+      },
+      {
+        "id": "pytest",
+        "name": "Executar pytest",
+        "command": "$env:QT_QPA_PLATFORM='offscreen'; & '%PYTHON%' -m pytest -q",
+        "timeout_minutes": 20,
+        "category": "test",
+        "venv": "test"
+      },
+      {
+        "id": "self-test-python",
+        "name": "Self-test Python LAS/LAZ",
+        "command": "& '%PYTHON%' scripts/self_test.py --output-dir '%REPO%'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Get-Content '%REPO%/LAS_CAFIISICA_SELF_TEST.txt'",
+        "timeout_minutes": 10,
+        "category": "test",
+        "venv": "test"
+      },
+      {
+        "id": "deps-build",
+        "name": "Instalar dependencias de build",
+        "command": "& '%PYTHON%' -m pip install --upgrade pip; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '%PYTHON%' -m pip install -e '.[dev]'",
+        "timeout_minutes": 35,
+        "category": "setup",
+        "venv": "build"
+      },
+      {
+        "id": "pyinstaller",
+        "name": "Criar LAS-CAFIISICA Windows",
+        "command": "& '%PYTHON%' scripts/build_windows.py",
+        "timeout_minutes": 70,
+        "category": "build",
+        "venv": "build"
+      },
+      {
+        "id": "exe-check",
+        "name": "Verificar LAS_CAFIISICA.exe",
+        "command": "$exe=Join-Path $env:LOCALAPPDATA 'LBM\\LASCAFIISICA\\dist\\LAS_CAFIISICA\\LAS_CAFIISICA.exe'; if (!(Test-Path $exe)) { throw ('LAS_CAFIISICA.exe nao foi gerado: ' + $exe) }; Get-Item $exe | Select-Object FullName,Length,LastWriteTime",
+        "timeout_minutes": 5,
+        "category": "test",
+        "venv": "build"
+      },
+      {
+        "id": "self-test-exe",
+        "name": "Self-test do executavel",
+        "command": "$dist=Join-Path $env:LOCALAPPDATA 'LBM\\LASCAFIISICA\\dist\\LAS_CAFIISICA'; Push-Location $dist; try { Remove-Item LAS_CAFIISICA_SELF_TEST.txt -ErrorAction SilentlyContinue; & ./LAS_CAFIISICA.exe --self-test; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; if (!(Test-Path './LAS_CAFIISICA_SELF_TEST.txt')) { throw 'Self-test nao criou relatorio' }; Get-Content ./LAS_CAFIISICA_SELF_TEST.txt } finally { Pop-Location }",
+        "timeout_minutes": 15,
+        "category": "test",
+        "venv": "build"
+      },
+      {
+        "id": "package",
+        "name": "Preparar pacote portatil",
+        "command": "$root=Join-Path $env:LOCALAPPDATA 'LBM\\LASCAFIISICA'; $pkg=Join-Path $root 'package'; $dist=Join-Path $root 'dist\\LAS_CAFIISICA'; if (Test-Path $pkg) { Remove-Item $pkg -Recurse -Force }; New-Item -ItemType Directory -Force -Path $pkg, '%LATEST%', '%ARCHIVE%' | Out-Null; Copy-Item -Recurse $dist (Join-Path $pkg 'LAS_CAFIISICA'); Copy-Item -Force 'packaging/START_LAS_CAFIISICA.bat' $pkg; Copy-Item -Force 'packaging/LEIA_ME.txt' $pkg; Copy-Item -Force 'README.md' $pkg",
+        "timeout_minutes": 10,
+        "category": "package",
+        "venv": "build"
+      },
+      {
+        "id": "zip",
+        "name": "Criar ZIP Windows e arquivo",
+        "command": "$root=Join-Path $env:LOCALAPPDATA 'LBM\\LASCAFIISICA'; $pkg=Join-Path $root 'package'; $latest='%LATEST%/LAS_CAFIISICA_Windows_x64.zip'; if (Test-Path $latest) { Remove-Item $latest -Force }; Compress-Archive -Path ($pkg + '/*') -DestinationPath $latest -Force; Copy-Item -Force $latest '%ARCHIVE%/LAS_CAFIISICA_%TIMESTAMP%.zip'; Write-Output ('ZIP: ' + (Resolve-Path $latest))",
+        "timeout_minutes": 25,
+        "category": "package",
+        "venv": "build"
+      }
     ]
   },
   "release": {},
