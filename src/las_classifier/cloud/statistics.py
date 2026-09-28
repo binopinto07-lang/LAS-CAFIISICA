@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections import Counter
 from dataclasses import dataclass
 from math import sqrt
 
@@ -42,7 +41,9 @@ class CloudStatistics:
         histogram = (
             ", ".join(
                 f"{key}: {value}"
-                for key, value in sorted(self.original_class_histogram.items())
+                for key, value in sorted(
+                    self.original_class_histogram.items()
+                )
             )
             or "empty"
         )
@@ -62,21 +63,50 @@ class CloudStatistics:
         ]
 
 
-def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
-    xyz = cloud.xyz
-    if cloud.point_count:
-        minimum = np.min(xyz, axis=0)
-        maximum = np.max(xyz, axis=0)
-        min_xyz = tuple(float(v) for v in minimum)
-        max_xyz = tuple(float(v) for v in maximum)
-        height_range = float(maximum[2] - minimum[2])
-        area = float(
-            (maximum[0] - minimum[0]) * (maximum[1] - minimum[1])
+def _header_bounds(
+    cloud: CloudModel,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    if not cloud.point_count:
+        empty = (0.0, 0.0, 0.0)
+        return empty, empty
+
+    minimum = tuple(float(v) for v in cloud.las.header.mins)
+    maximum = tuple(float(v) for v in cloud.las.header.maxs)
+    return minimum, maximum
+
+
+def _parse_crs(cloud: CloudModel) -> str:
+    try:
+        parsed = cloud.las.header.parse_crs()
+    except Exception as exc:
+        LOGGER.warning(
+            "CRS_PARSE_FAILED=%s: %s",
+            type(exc).__name__,
+            exc,
         )
-    else:
-        min_xyz = max_xyz = (0.0, 0.0, 0.0)
-        height_range = 0.0
-        area = 0.0
+        return f"Unavailable ({type(exc).__name__})"
+    return "Unknown" if parsed is None else parsed.to_string()
+
+
+def _classification_histogram(cloud: CloudModel) -> dict[int, int]:
+    if cloud.original_class.size == 0:
+        return {}
+
+    counts = np.bincount(cloud.original_class, minlength=256)
+    return {
+        int(class_id): int(count)
+        for class_id, count in enumerate(counts)
+        if count
+    }
+
+
+def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
+    min_xyz, max_xyz = _header_bounds(cloud)
+    height_range = float(max_xyz[2] - min_xyz[2])
+    area = float(
+        (max_xyz[0] - min_xyz[0])
+        * (max_xyz[1] - min_xyz[1])
+    )
 
     density = (
         cloud.point_count / area
@@ -84,10 +114,6 @@ def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
         else None
     )
     spacing = sqrt(1.0 / density) if density and density > 0 else None
-
-    parsed_crs = cloud.las.header.parse_crs()
-    crs = "Unknown" if parsed_crs is None else parsed_crs.to_string()
-    histogram = dict(Counter(int(v) for v in cloud.original_class.tolist()))
 
     result = CloudStatistics(
         file_name=cloud.path.name,
@@ -97,16 +123,22 @@ def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
         min_xyz=min_xyz,
         max_xyz=max_xyz,
         height_range=height_range,
-        crs=crs,
+        crs=_parse_crs(cloud),
         dimensions=tuple(cloud.las.point_format.dimension_names),
-        original_class_histogram=histogram,
+        original_class_histogram=_classification_histogram(cloud),
         approximate_xy_density=density,
         approximate_point_spacing=spacing,
     )
     LOGGER.info("BOUNDS=%s -> %s", result.min_xyz, result.max_xyz)
     LOGGER.info("CRS=%s", result.crs)
-    LOGGER.info("AVAILABLE_DIMENSIONS=%s", ",".join(result.dimensions))
-    LOGGER.info("CLASS_HISTOGRAM_ORIGINAL=%s", result.original_class_histogram)
+    LOGGER.info(
+        "AVAILABLE_DIMENSIONS=%s",
+        ",".join(result.dimensions),
+    )
+    LOGGER.info(
+        "CLASS_HISTOGRAM_ORIGINAL=%s",
+        result.original_class_histogram,
+    )
     LOGGER.info("POINT_SPACING=%s", result.approximate_point_spacing)
     LOGGER.info("DENSITY=%s", result.approximate_xy_density)
     return result

@@ -22,7 +22,11 @@ def _build_root() -> Path:
 
 
 def _run(command: list[str], cwd: Path) -> None:
-    print("+", " ".join(str(item) for item in command), flush=True)
+    print(
+        "+",
+        " ".join(str(item) for item in command),
+        flush=True,
+    )
     completed = subprocess.run(command, cwd=cwd)
     if completed.returncode != 0:
         raise SystemExit(completed.returncode)
@@ -30,7 +34,10 @@ def _run(command: list[str], cwd: Path) -> None:
 
 def main() -> int:
     if os.name != "nt":
-        print("This builder targets Windows only.", file=sys.stderr)
+        print(
+            "This builder targets Windows only.",
+            file=sys.stderr,
+        )
         return 2
 
     repo = _repo_root()
@@ -68,6 +75,8 @@ def main() -> int:
         "--collect-all",
         "lazrs",
         "--collect-all",
+        "pyproj",
+        "--collect-all",
         "scipy",
         str(repo / "app" / "main.py"),
     ]
@@ -75,7 +84,10 @@ def main() -> int:
 
     exe = dist_root / APP_NAME / f"{APP_NAME}.exe"
     if not exe.is_file():
-        print(f"Executable was not created: {exe}", file=sys.stderr)
+        print(
+            f"Executable was not created: {exe}",
+            file=sys.stderr,
+        )
         return 3
 
     print(f"BUILD_OK={exe}")

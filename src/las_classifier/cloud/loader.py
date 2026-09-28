@@ -6,7 +6,7 @@ from pathlib import Path
 import laspy
 import numpy as np
 
-from .model import CloudModel, UNKNOWN_CLASS
+from .model import CloudModel
 
 
 LOGGER = logging.getLogger("las_cafiisica.cloud.loader")
@@ -15,7 +15,7 @@ SUPPORTED_EXTENSIONS = {".las", ".laz"}
 
 
 def load_cloud(path: str | Path) -> CloudModel:
-    """Read LAS/LAZ while preserving input classification for diagnostics only."""
+    """Read LAS/LAZ and preserve source classification without adopting it."""
 
     source = Path(path).expanduser().resolve()
     if source.suffix.lower() not in SUPPORTED_EXTENSIONS:
@@ -27,23 +27,28 @@ def load_cloud(path: str | Path) -> CloudModel:
 
     LOGGER.info("INPUT_FILE=%s", source)
     las = laspy.read(source)
-    xyz = np.column_stack((las.x, las.y, las.z)).astype(np.float64, copy=False)
 
     if "classification" in las.point_format.dimension_names:
-        original_class = np.asarray(las.classification, dtype=np.uint8).copy()
+        original_class = np.asarray(
+            las.classification, dtype=np.uint8
+        ).copy()
     else:
         original_class = np.zeros(len(las.points), dtype=np.uint8)
 
-    # Critical invariant: source classification is never adopted as working state.
-    working_class = np.full(len(las.points), UNKNOWN_CLASS, dtype=np.uint8)
-
-    LOGGER.info("POINT_COUNT=%d", len(las.points))
-    LOGGER.info("IGNORE_INPUT_CLASSIFICATION=%s", IGNORE_INPUT_CLASSIFICATION)
-
-    return CloudModel(
+    cloud = CloudModel(
         path=source,
         las=las,
-        xyz=xyz,
         original_class=original_class,
-        working_class=working_class,
     )
+
+    LOGGER.info("POINT_COUNT=%d", cloud.point_count)
+    LOGGER.info(
+        "IGNORE_INPUT_CLASSIFICATION=%s",
+        IGNORE_INPUT_CLASSIFICATION,
+    )
+    LOGGER.info("XYZ_MATERIALIZED=%s", cloud._xyz_cache is not None)
+    LOGGER.info(
+        "WORKING_CLASS_MATERIALIZED=%s",
+        cloud._working_class is not None,
+    )
+    return cloud
