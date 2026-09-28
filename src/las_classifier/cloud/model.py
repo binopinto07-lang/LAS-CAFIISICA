@@ -13,13 +13,7 @@ UNKNOWN_CLASS = np.uint8(0)
 
 @dataclass(slots=True)
 class CloudModel:
-    """In-memory cloud state.
-
-    ``original_class`` is an immutable-by-convention copy of the LAS input
-    classification. ``working_class`` starts UNKNOWN and deliberately does not
-    inherit input classification, so future classifiers cannot accidentally use
-    the source classes as their initial answer.
-    """
+    """In-memory cloud state with immutable-by-convention source classes."""
 
     path: Path
     las: laspy.LasData

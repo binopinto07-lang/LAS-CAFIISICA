@@ -3,5 +3,8 @@ __pycache__/
 *.py[cod]
 .venv/
 build/
+builds/
 dist/
 *.egg-info/
+logs/*.log
+LAS_CAFIISICA_SELF_TEST.txt

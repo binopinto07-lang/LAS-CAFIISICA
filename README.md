@@ -1,33 +1,52 @@
 # LAS-CAFIISICA
 
-Primeiro marco funcional do classificador de nuvens LAS/LAZ.
+Aplicação desktop Windows em desenvolvimento para leitura e futura reclassificação de nuvens LAS/LAZ.
 
-Funcionalidades atualmente implementadas:
+## Estado funcional atual
 
-- aplicação desktop PySide6 executável com `las-cafiisica`;
-- abertura de ficheiros `.las` e `.laz` com `laspy`;
-- carregamento real de XYZ;
-- preservação da classificação de entrada em `original_class`;
-- classificação de entrada ignorada como estado de trabalho: `working_class` começa sempre como UNKNOWN (0);
-- estatísticas reais da cloud: versão LAS, point format, número de pontos, limites XYZ, amplitude Z, CRS, dimensões, histograma da classificação original, densidade XY aproximada e espaçamento aproximado;
-- testes unitários do loader e das estatísticas.
+- abre LAS e LAZ com `laspy`;
+- carrega XYZ real;
+- preserva a classificação de entrada em `original_class`;
+- inicia `working_class` em UNKNOWN, sem usar a classificação de entrada como decisão;
+- mostra estatísticas reais da cloud;
+- cria logs locais;
+- inclui testes LAS/LAZ;
+- inclui self-test Python e self-test do executável;
+- inclui perfil autoritativo para Local Build Manager V0.1.8 com SOURCE_GUARD;
+- build Windows por PyInstaller em caminho curto `%LOCALAPPDATA%\LBM\LASCAFIISICA`.
 
-## Instalação de desenvolvimento
+Ainda não existem motores SMRF, CSF, PTD ou Fusion.
 
-```bash
+## Desenvolvimento
+
+```text
 python -m pip install -e ".[dev]"
-```
-
-## Executar
-
-```bash
+pytest
 las-cafiisica
 ```
 
-## Testes
+## Local Build Manager
 
-```bash
-pytest
+Selecionar a pasta/cloned repository `LAS-CAFIISICA` no Local Build Manager V0.1.8.
+O gestor descobre `localbuild/las_cafiisica.json` diretamente no repositório.
+
+Pipelines disponíveis:
+
+- `test`: dependências, compileall, pytest e self-test Python;
+- `build`: PyInstaller, verificação do EXE, self-test do EXE e ZIP;
+- `full`: TEST + BUILD numa única execução.
+
+O SOURCE_GUARD exige:
+
+```text
+LAS_CAFIISICA_BUILD_SOURCE_2026_09_R1
 ```
 
-Ainda não existem motores SMRF, CSF, PTD ou Fusion neste marco.
+Saída esperada:
+
+```text
+builds/latest/LAS_CAFIISICA_Windows_x64.zip
+builds/archive/LAS_CAFIISICA_<TIMESTAMP>.zip
+```
+
+O projeto não depende de GitHub Actions para testar ou compilar.

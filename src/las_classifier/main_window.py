@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -18,6 +19,9 @@ from .cloud.loader import load_cloud
 from .cloud.statistics import calculate_statistics
 
 
+LOGGER = logging.getLogger("las_cafiisica.ui")
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -32,7 +36,9 @@ class MainWindow(QMainWindow):
 
         self.statistics_view = QPlainTextEdit()
         self.statistics_view.setReadOnly(True)
-        self.statistics_view.setPlaceholderText("Open a LAS/LAZ file to calculate real cloud statistics.")
+        self.statistics_view.setPlaceholderText(
+            "Open a LAS/LAZ file to calculate real cloud statistics."
+        )
 
         layout = QVBoxLayout()
         layout.addWidget(self.open_button)
@@ -58,9 +64,12 @@ class MainWindow(QMainWindow):
         try:
             cloud = load_cloud(filename)
             stats = calculate_statistics(cloud)
-        except Exception as exc:  # UI boundary: surface the real failure.
+        except Exception as exc:
+            LOGGER.exception("Failed to load cloud: %s", filename)
             self.statusBar().showMessage("Load failed")
-            QMessageBox.critical(self, "LAS-CAFIISICA", f"Could not open file:\n{exc}")
+            QMessageBox.critical(
+                self, "LAS-CAFIISICA", f"Could not open file:\n{exc}"
+            )
             return
 
         self.file_label.setText(str(Path(filename)))
