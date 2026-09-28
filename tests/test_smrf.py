@@ -7,6 +7,7 @@ from las_classifier.classifiers.smrf import (
     GROUND_CLASS,
     NON_GROUND_CLASS,
     SMRFParams,
+    _progressive_object_mask,
     run_smrf,
 )
 from las_classifier.cloud.exporter import (
@@ -386,3 +387,21 @@ def test_smrf_export_adds_synthetic_ground_points(
         )
         == 2
     )
+
+
+def test_progressive_morphology_preserves_steep_planar_edges():
+    rows, cols = np.indices((21, 21))
+    surface = (
+        100.0
+        + 1.20 * cols
+        + 0.20 * rows
+    ).astype(np.float32)
+
+    objects = _progressive_object_mask(
+        surface,
+        cell=1.0,
+        slope=0.15,
+        window=8.0,
+    )
+
+    assert not np.any(objects)
