@@ -294,6 +294,21 @@ class AdaptivePTDModel:
         confidence, _ = self._confidence(x, y, z)
         return confidence
 
+    def confidence_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        confidence, _ = self._confidence(
+            x,
+            y,
+            z,
+            points=points,
+        )
+        return confidence
+
     def iter_synthetic_fill_xyz(self):
         yield from iter_triangle_fill(
             self.tin,
