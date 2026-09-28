@@ -379,8 +379,8 @@ def run_adaptive_ptd(
     discontinuity = triangle_discontinuity(tin)
 
     dense_edge = max(
-        candidate_spacing * 3.5,
-        analysis.median_spacing * 12.0,
+        candidate_spacing * 2.5,
+        analysis.median_spacing * 6.0,
     )
     gaps = detect_gaps(
         tin,
