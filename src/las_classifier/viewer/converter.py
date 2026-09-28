@@ -27,7 +27,8 @@ from .paths import cache_root, converter_executable
 
 LOGGER = logging.getLogger("las_cafiisica.viewer.converter")
 ProgressCallback = Callable[[int, str], None]
-VIEWER_CACHE_REVISION = 2
+SOURCE_CACHE_REVISION = 1
+CLASSIFIED_VIEWER_CACHE_REVISION = 2
 VIEWER_MAX_GROUND_POINTS = 12_000_000
 VIEWER_MAX_NON_GROUND_POINTS = 8_000_000
 
@@ -37,7 +38,7 @@ def source_fingerprint(source: str | Path) -> str:
     stat = path.stat()
     payload = (
         f"{path}|{stat.st_size}|{stat.st_mtime_ns}|"
-        f"{VIEWER_CACHE_REVISION}"
+        f"{SOURCE_CACHE_REVISION}"
     ).encode("utf-8", errors="surrogatepass")
     return hashlib.sha256(payload).hexdigest()[:20]
 
@@ -50,7 +51,7 @@ def classified_fingerprint(
         "source": source_fingerprint(source),
         "params": asdict(result.model.params),
         "version": __version__,
-        "viewer_cache_revision": VIEWER_CACHE_REVISION,
+        "viewer_cache_revision": CLASSIFIED_VIEWER_CACHE_REVISION,
         "viewer_ground_cap": VIEWER_MAX_GROUND_POINTS,
         "viewer_non_ground_cap": VIEWER_MAX_NON_GROUND_POINTS,
     }
