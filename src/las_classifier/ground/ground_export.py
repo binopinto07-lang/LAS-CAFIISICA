@@ -12,6 +12,11 @@ LOGGER = logging.getLogger("las_cafiisica.ground.ground_export")
 GROUND_CLASS = np.uint8(2)
 ProgressCallback = Callable[[int, str], None]
 
+GROUND_CONFIDENCE = "GroundConfidence"
+GROUND_SOURCE = "GroundSource"
+INTERPOLATION_DISTANCE = "InterpolationDistance"
+GROUND_METHOD = "GroundMethod"
+
 
 def _scaled(raw, scale: float, offset: float) -> np.ndarray:
     return (
@@ -25,6 +30,105 @@ def _classify_points(model, points, x, y, z) -> np.ndarray:
     if method is not None:
         return method(points, x, y, z)
     return model.classify_xyz(x, y, z)
+
+
+def _method_code(model) -> int:
+    name = str(getattr(model, "engine_name", "")).lower()
+    if "hybrid" in name:
+        return 2
+    if "adaptive" in name or "ptd" in name:
+        return 1
+    if "csf" in name:
+        return 3
+    if "smrf" in name:
+        return 4
+    return 0
+
+
+def _with_ground_metadata(header: laspy.LasHeader) -> laspy.LasHeader:
+    result = header.copy()
+    names = set(result.point_format.dimension_names)
+    extras = []
+    if GROUND_CONFIDENCE not in names:
+        extras.append(
+            laspy.ExtraBytesParams(
+                name=GROUND_CONFIDENCE,
+                type=np.float32,
+            )
+        )
+    if GROUND_SOURCE not in names:
+        extras.append(
+            laspy.ExtraBytesParams(
+                name=GROUND_SOURCE,
+                type=np.uint8,
+            )
+        )
+    if INTERPOLATION_DISTANCE not in names:
+        extras.append(
+            laspy.ExtraBytesParams(
+                name=INTERPOLATION_DISTANCE,
+                type=np.float32,
+            )
+        )
+    if GROUND_METHOD not in names:
+        extras.append(
+            laspy.ExtraBytesParams(
+                name=GROUND_METHOD,
+                type=np.uint8,
+            )
+        )
+    if extras:
+        result.add_extra_dims(extras)
+    return result
+
+
+def _copy_to_output_format(
+    source_points,
+    output_header: laspy.LasHeader,
+) -> laspy.ScaleAwarePointRecord:
+    target = laspy.ScaleAwarePointRecord.zeros(
+        len(source_points),
+        header=output_header,
+    )
+    target_names = set(target.point_format.dimension_names)
+    for name in source_points.point_format.dimension_names:
+        if name not in target_names:
+            continue
+        try:
+            target[name] = source_points[name]
+        except Exception:
+            LOGGER.debug(
+                "GROUND_EXPORT_COPY_SKIPPED dimension=%s",
+                name,
+            )
+    return target
+
+
+def _point_confidence(
+    model,
+    points,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    classes: np.ndarray,
+) -> np.ndarray:
+    method = getattr(model, "confidence_points", None)
+    if method is not None:
+        return np.asarray(
+            method(points, x, y, z),
+            dtype=np.float32,
+        )
+    method = getattr(model, "confidence_xyz", None)
+    if method is not None:
+        return np.asarray(
+            method(x, y, z),
+            dtype=np.float32,
+        )
+    return np.where(
+        classes == GROUND_CLASS,
+        1.0,
+        0.0,
+    ).astype(np.float32)
 
 
 def _synthetic_record(
@@ -46,13 +150,30 @@ def _synthetic_record(
         GROUND_CLASS,
         dtype=np.uint8,
     )
+    names = set(header.point_format.dimension_names)
+    if GROUND_CONFIDENCE in names:
+        points[GROUND_CONFIDENCE] = np.full(
+            count,
+            0.75,
+            dtype=np.float32,
+        )
+    if GROUND_SOURCE in names:
+        points[GROUND_SOURCE] = np.full(
+            count,
+            2,
+            dtype=np.uint8,
+        )
+    if INTERPOLATION_DISTANCE in names:
+        points[INTERPOLATION_DISTANCE] = np.zeros(
+            count,
+            dtype=np.float32,
+        )
 
     try:
         points.synthetic = np.ones(count, dtype=np.uint8)
     except Exception:
         LOGGER.warning("SYNTHETIC_FLAG_UNAVAILABLE")
 
-    names = set(header.point_format.dimension_names)
     if "return_number" in names:
         points.return_number = np.ones(count, dtype=np.uint8)
     if "number_of_returns" in names:
@@ -90,8 +211,9 @@ def export_ground_only(
         temporary.unlink()
 
     with laspy.open(source) as reader:
-        header = reader.header.copy()
-        scales = header.scales
+        source_header = reader.header.copy()
+        header = _with_ground_metadata(source_header)
+        scales = source_header.scales
         offsets = header.offsets
         total = int(reader.header.point_count)
         chunk_size = int(getattr(model.params, "chunk_size", 2_000_000))
@@ -121,12 +243,51 @@ def export_ground_only(
                     )
                     keep = classes == GROUND_CLASS
                     if np.any(keep):
-                        ground_points = points[keep]
+                        confidence = _point_confidence(
+                            model,
+                            points,
+                            x,
+                            y,
+                            z,
+                            classes,
+                        )
+                        selected = points[keep]
+                        ground_points = _copy_to_output_format(
+                            selected,
+                            header,
+                        )
+                        kept_count = int(np.count_nonzero(keep))
                         ground_points.classification = np.full(
-                            int(np.count_nonzero(keep)),
+                            kept_count,
                             GROUND_CLASS,
                             dtype=np.uint8,
                         )
+                        names = set(
+                            header.point_format.dimension_names
+                        )
+                        if GROUND_CONFIDENCE in names:
+                            ground_points[GROUND_CONFIDENCE] = (
+                                confidence[keep]
+                            )
+                        if GROUND_SOURCE in names:
+                            ground_points[GROUND_SOURCE] = np.full(
+                                kept_count,
+                                1,
+                                dtype=np.uint8,
+                            )
+                        if INTERPOLATION_DISTANCE in names:
+                            ground_points[
+                                INTERPOLATION_DISTANCE
+                            ] = np.zeros(
+                                kept_count,
+                                dtype=np.float32,
+                            )
+                        if GROUND_METHOD in names:
+                            ground_points[GROUND_METHOD] = np.full(
+                                kept_count,
+                                _method_code(model),
+                                dtype=np.uint8,
+                            )
                         writer.write_points(ground_points)
                         real_ground += len(ground_points)
 
@@ -161,6 +322,29 @@ def export_ground_only(
                                 np.asarray(y, dtype=np.float64),
                                 np.asarray(z, dtype=np.float64),
                             )
+                            names = set(
+                                header.point_format.dimension_names
+                            )
+                            if GROUND_METHOD in names:
+                                synthetic[GROUND_METHOD] = np.full(
+                                    len(synthetic),
+                                    _method_code(model),
+                                    dtype=np.uint8,
+                                )
+                            if INTERPOLATION_DISTANCE in names:
+                                synthetic[
+                                    INTERPOLATION_DISTANCE
+                                ] = np.full(
+                                    len(synthetic),
+                                    float(
+                                        getattr(
+                                            model,
+                                            "effective_fill_spacing",
+                                            0.0,
+                                        )
+                                    ),
+                                    dtype=np.float32,
+                                )
                             writer.write_points(synthetic)
                             synthetic_written += len(synthetic)
                             if progress is not None and fill_total:
