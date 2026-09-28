@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,6 +12,7 @@ from .paths import potree_root, viewer_root
 
 
 LOGGER = logging.getLogger("las_cafiisica.viewer.server")
+_RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 
 class ViewerServer:
@@ -49,26 +51,92 @@ class ViewerServer:
                     self.send_error(404)
                     return
 
-                content_type = mimetypes.guess_type(target.name)[0]
-                if content_type is None:
-                    content_type = "application/octet-stream"
+                content_type = (
+                    mimetypes.guess_type(target.name)[0]
+                    or "application/octet-stream"
+                )
+                size = target.stat().st_size
 
                 try:
-                    size = target.stat().st_size
-                    self.send_response(200)
-                    self.send_header("Content-Type", content_type)
-                    self.send_header("Content-Length", str(size))
-                    self.send_header("Cache-Control", "no-cache")
+                    byte_range = self._requested_range(size)
+                except ValueError:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
                     self.end_headers()
-                    if send_body:
-                        with target.open("rb") as stream:
-                            while True:
-                                chunk = stream.read(1024 * 1024)
-                                if not chunk:
-                                    break
-                                self.wfile.write(chunk)
+                    return
+
+                if byte_range is None:
+                    start = 0
+                    end = max(0, size - 1)
+                    status = 200
+                else:
+                    start, end = byte_range
+                    status = 206
+
+                length = 0 if size == 0 else end - start + 1
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Length", str(length))
+                self.send_header("Cache-Control", "no-cache")
+                if status == 206:
+                    self.send_header(
+                        "Content-Range",
+                        f"bytes {start}-{end}/{size}",
+                    )
+                self.end_headers()
+
+                if not send_body or length == 0:
+                    return
+
+                try:
+                    with target.open("rb") as stream:
+                        stream.seek(start)
+                        remaining = length
+                        while remaining > 0:
+                            chunk = stream.read(min(1024 * 1024, remaining))
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            remaining -= len(chunk)
                 except (BrokenPipeError, ConnectionResetError):
                     return
+
+            def _requested_range(
+                self,
+                size: int,
+            ) -> tuple[int, int] | None:
+                header = self.headers.get("Range")
+                if not header:
+                    return None
+
+                match = _RANGE_RE.match(header.strip())
+                if match is None or size <= 0:
+                    raise ValueError("Invalid Range")
+
+                first, last = match.groups()
+                if first == "" and last == "":
+                    raise ValueError("Invalid Range")
+
+                if first == "":
+                    suffix = int(last)
+                    if suffix <= 0:
+                        raise ValueError("Invalid suffix Range")
+                    suffix = min(suffix, size)
+                    return size - suffix, size - 1
+
+                start = int(first)
+                if start >= size:
+                    raise ValueError("Range starts beyond EOF")
+
+                if last == "":
+                    end = size - 1
+                else:
+                    end = min(int(last), size - 1)
+
+                if end < start:
+                    raise ValueError("Invalid Range")
+                return start, end
 
         self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self._thread = threading.Thread(
