@@ -90,11 +90,18 @@ class MainWindow(QMainWindow):
         self.scalar_spin = self._spin(
             1.25, 0.10, 10.0, 0.05, 2
         )
+        self.fill_spacing_spin = self._spin(
+            0.25, 0.10, 1.00, 0.05, 2
+        )
         form.addRow("Cell (m)", self.cell_spin)
         form.addRow("Slope", self.slope_spin)
         form.addRow("Window (m)", self.window_spin)
         form.addRow("Threshold (m)", self.threshold_spin)
         form.addRow("Scalar", self.scalar_spin)
+        form.addRow(
+            "Fill spacing (m)",
+            self.fill_spacing_spin,
+        )
 
         buttons = QHBoxLayout()
         self.smrf_button = QPushButton(
@@ -362,6 +369,7 @@ class MainWindow(QMainWindow):
             window=self.window_spin.value(),
             threshold=self.threshold_spin.value(),
             scalar=self.scalar_spin.value(),
+            fill_spacing=self.fill_spacing_spin.value(),
         )
 
     def run_smrf(self) -> None:
@@ -418,6 +426,14 @@ class MainWindow(QMainWindow):
                     f"Window: {p.window:.1f} m",
                     f"Threshold: {p.threshold:.2f} m",
                     f"Scalar: {p.scalar:.2f}",
+                    (
+                        "Synthetic ground fill: "
+                        f"{result.synthetic_fill_point_count:,} pts"
+                    ),
+                    (
+                        "Fill spacing: "
+                        f"{result.model.effective_fill_spacing:.2f} m"
+                    ),
                     (
                         "Elapsed: "
                         f"{result.elapsed_seconds:.1f} s"

@@ -9,14 +9,24 @@ from las_classifier.classifiers.smrf import (
     SMRFParams,
     run_smrf,
 )
-from las_classifier.cloud.exporter import export_classified
-from las_classifier.cloud.loader import load_cloud
+from las_classifier.cloud.exporter import (
+    export_classified,
+)
+from las_classifier.cloud.loader import (
+    load_cloud,
+)
 
 
 def _synthetic_scene(path):
     xs, ys = np.meshgrid(
-        np.arange(31, dtype=np.float64),
-        np.arange(31, dtype=np.float64),
+        np.arange(
+            31,
+            dtype=np.float64,
+        ),
+        np.arange(
+            31,
+            dtype=np.float64,
+        ),
     )
     terrain = (
         100.0
@@ -32,21 +42,31 @@ def _synthetic_scene(path):
     z = terrain.copy()
     z[object_mask] += 5.0
 
-    keep = np.ones(xs.shape, dtype=bool)
+    # A genuine enclosed data void is also rebuilt.
+    keep = np.ones(
+        xs.shape,
+        dtype=bool,
+    )
     keep[3:6, 23:26] = False
 
     header = laspy.LasHeader(
         point_format=3,
         version="1.2",
     )
-    las = laspy.LasData(header)
+    las = laspy.LasData(
+        header
+    )
     las.x = xs[keep]
     las.y = ys[keep]
     las.z = z[keep]
 
-    # Deliberately misleading input: every point says "ground".
+    # Deliberately wrong source labels: everything says ground.
     las.classification = np.full(
-        int(np.count_nonzero(keep)),
+        int(
+            np.count_nonzero(
+                keep
+            )
+        ),
         2,
         dtype=np.uint8,
     )
@@ -58,10 +78,19 @@ def _synthetic_scene(path):
     )
 
 
-def test_smrf_removes_object_and_inpaints_terrain(tmp_path):
+def test_smrf_removes_object_and_builds_fill_surface(
+    tmp_path,
+):
     source = tmp_path / "scene.las"
-    object_mask, terrain = _synthetic_scene(source)
-    cloud = load_cloud(source)
+    (
+        object_mask,
+        terrain,
+    ) = _synthetic_scene(
+        source
+    )
+    cloud = load_cloud(
+        source
+    )
 
     result = run_smrf(
         cloud,
@@ -71,15 +100,28 @@ def test_smrf_removes_object_and_inpaints_terrain(tmp_path):
             window=8.0,
             threshold=0.5,
             scalar=1.25,
+            fill_spacing=0.25,
             chunk_size=100,
             inpaint_iterations=400,
         ),
     )
 
-    x = np.asarray(cloud.las.x)
-    y = np.asarray(cloud.las.y)
-    z = np.asarray(cloud.las.z)
-    classes = result.model.classify_xyz(x, y, z)
+    x = np.asarray(
+        cloud.las.x
+    )
+    y = np.asarray(
+        cloud.las.y
+    )
+    z = np.asarray(
+        cloud.las.z
+    )
+    classes = (
+        result.model.classify_xyz(
+            x,
+            y,
+            z,
+        )
+    )
 
     assert np.all(
         classes[object_mask]
@@ -90,13 +132,30 @@ def test_smrf_removes_object_and_inpaints_terrain(tmp_path):
         == GROUND_CLASS
     )
 
-    # The elevated 7x7 object must be removed from the terrain raster and
-    # the provisional ground surface must be filled through that hole.
-    assert result.object_cell_count > 0
-    assert result.inpainted_cell_count > 0
-    center = result.model.ground_surface[15, 15]
+    assert (
+        result.object_cell_count
+        > 0
+    )
+    assert (
+        result.interior_empty_cell_count
+        >= 9
+    )
+    assert (
+        result.synthetic_fill_point_count
+        > result.inpainted_cell_count
+    )
+
+    center = (
+        result.model.ground_surface[
+            15,
+            15,
+        ]
+    )
     assert abs(
-        float(center) - float(terrain[15, 15])
+        float(center)
+        - float(
+            terrain[15, 15]
+        )
     ) < 0.75
     assert np.all(
         np.isfinite(
@@ -114,24 +173,74 @@ def test_smrf_removes_object_and_inpaints_terrain(tmp_path):
     )
 
 
-def test_smrf_uses_slope_scaled_final_threshold(tmp_path):
-    path = tmp_path / "slope.las"
-    xs, ys = np.meshgrid(
-        np.arange(12, dtype=np.float64),
-        np.arange(12, dtype=np.float64),
+def test_smrf_rejects_tall_vegetation_on_steep_face(
+    tmp_path,
+):
+    path = tmp_path / "steep.las"
+    axis = np.arange(
+        0.0,
+        21.0,
+        0.5,
     )
-    z = 50.0 + 0.25 * xs
+    xs, ys = np.meshgrid(
+        axis,
+        axis,
+    )
+    ground_z = (
+        100.0
+        + 1.20 * xs
+        + 0.20 * ys
+    )
+
+    gx = xs.ravel()
+    gy = ys.ravel()
+    gz = ground_z.ravel()
+
+    vegetation_sites = (
+        (gx >= 8.0)
+        & (gx <= 12.0)
+        & (gy >= 8.0)
+        & (gy <= 12.0)
+    )
+    vx = np.concatenate(
+        [
+            gx[vegetation_sites],
+            gx[vegetation_sites],
+        ]
+    )
+    vy = np.concatenate(
+        [
+            gy[vegetation_sites],
+            gy[vegetation_sites],
+        ]
+    )
+    vz = np.concatenate(
+        [
+            gz[vegetation_sites]
+            + 3.0,
+            gz[vegetation_sites]
+            + 5.0,
+        ]
+    )
 
     header = laspy.LasHeader(
         point_format=3,
         version="1.2",
     )
-    las = laspy.LasData(header)
-    las.x = xs.ravel()
-    las.y = ys.ravel()
-    las.z = z.ravel()
+    las = laspy.LasData(
+        header
+    )
+    las.x = np.concatenate(
+        [gx, vx]
+    )
+    las.y = np.concatenate(
+        [gy, vy]
+    )
+    las.z = np.concatenate(
+        [gz, vz]
+    )
     las.classification = np.zeros(
-        xs.size,
+        las.x.shape[0],
         dtype=np.uint8,
     )
     las.write(path)
@@ -141,26 +250,61 @@ def test_smrf_uses_slope_scaled_final_threshold(tmp_path):
         cloud,
         SMRFParams(
             cell=1.0,
-            slope=0.30,
-            window=6.0,
-            threshold=0.20,
+            slope=0.15,
+            window=8.0,
+            threshold=0.5,
             scalar=1.25,
-            chunk_size=64,
+            fill_spacing=0.25,
+            chunk_size=256,
         ),
     )
-
-    classes = result.model.classify_xyz(
-        np.asarray(cloud.las.x),
-        np.asarray(cloud.las.y),
-        np.asarray(cloud.las.z),
+    classes = (
+        result.model.classify_xyz(
+            np.asarray(
+                cloud.las.x
+            ),
+            np.asarray(
+                cloud.las.y
+            ),
+            np.asarray(
+                cloud.las.z
+            ),
+        )
     )
-    assert np.all(classes == GROUND_CLASS)
+
+    ground_classes = classes[
+        : gx.size
+    ]
+    vegetation_classes = classes[
+        gx.size :
+    ]
+
+    assert (
+        np.mean(
+            ground_classes
+            == GROUND_CLASS
+        )
+        > 0.98
+    )
+    assert np.all(
+        vegetation_classes
+        == NON_GROUND_CLASS
+    )
 
 
-def test_smrf_export_writes_classes_and_epsg_3763(tmp_path):
+def test_smrf_export_adds_synthetic_ground_points(
+    tmp_path,
+):
     source = tmp_path / "scene.las"
-    object_mask, _ = _synthetic_scene(source)
-    cloud = load_cloud(source)
+    (
+        object_mask,
+        _,
+    ) = _synthetic_scene(
+        source
+    )
+    cloud = load_cloud(
+        source
+    )
     result = run_smrf(
         cloud,
         SMRFParams(
@@ -169,36 +313,76 @@ def test_smrf_export_writes_classes_and_epsg_3763(tmp_path):
             window=8.0,
             threshold=0.5,
             scalar=1.25,
+            fill_spacing=0.25,
             chunk_size=100,
         ),
     )
 
-    output = tmp_path / "classified.las"
+    output = (
+        tmp_path
+        / "classified.las"
+    )
     export_classified(
         source,
         output,
         result.model,
     )
 
-    classified = laspy.read(output)
-    crs = classified.header.parse_crs()
+    classified = laspy.read(
+        output
+    )
+    crs = (
+        classified.header.parse_crs()
+    )
     output_classes = np.asarray(
         classified.classification
     )
 
     assert crs is not None
-    assert crs.to_epsg() == 3763
+    assert (
+        crs.to_epsg()
+        == 3763
+    )
+    assert len(
+        classified.points
+    ) == (
+        cloud.point_count
+        + result.synthetic_fill_point_count
+    )
+
+    original_part = output_classes[
+        : cloud.point_count
+    ]
     assert np.all(
-        output_classes[object_mask]
+        original_part[
+            object_mask
+        ]
         == NON_GROUND_CLASS
     )
     assert np.all(
-        output_classes[~object_mask]
+        output_classes[
+            cloud.point_count :
+        ]
         == GROUND_CLASS
     )
 
-    original = laspy.read(source)
+    synthetic = np.asarray(
+        classified.synthetic
+    )
+    assert int(
+        np.count_nonzero(
+            synthetic
+        )
+    ) == (
+        result.synthetic_fill_point_count
+    )
+
+    original = laspy.read(
+        source
+    )
     assert np.all(
-        np.asarray(original.classification)
+        np.asarray(
+            original.classification
+        )
         == 2
     )

@@ -1,4 +1,4 @@
-LAS-CAFIISICA 0.2.0-dev
+LAS-CAFIISICA 0.3.3-dev
 
 Executar START_LAS_CAFIISICA.bat ou LAS_CAFIISICA\LAS_CAFIISICA.exe.
 
@@ -14,3 +14,5 @@ Funcional:
 - exportacao para novo LAS/LAZ em EPSG:3763.
 
 A classificacao existente no ficheiro de entrada nao e usada pelo SMRF.
+
+A nuvem classificada inclui pontos sinteticos de preenchimento do terreno nas celulas removidas/vazias. Estes pontos sao classe 2 e levam o flag LAS synthetic.

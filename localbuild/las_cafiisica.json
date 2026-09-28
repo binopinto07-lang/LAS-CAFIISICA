@@ -213,7 +213,7 @@
     ]
   },
   "release": {},
-  "config_revision": 10,
+  "config_revision": 11,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -243,7 +243,7 @@
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R9"
+    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R10"
   },
   "auto_bootstrap_python": true
 }
