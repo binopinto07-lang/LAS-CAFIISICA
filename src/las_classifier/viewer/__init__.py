@@ -1,5 +1,3 @@
 """Potree-based desktop point-cloud viewport."""
 
-from .widget import PointCloudViewer
-
-__all__ = ["PointCloudViewer"]
+__all__: list[str] = []
