@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "las-cafiisica"
-version = "0.1.3.dev0"
-description = "Desktop LAS/LAZ inspection foundation for LAS-CAFIISICA"
+version = "0.2.0.dev0"
+description = "Desktop LAS/LAZ ground classification for LAS-CAFIISICA"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -1,9 +1,16 @@
-LAS-CAFIISICA 0.1.3-dev
+LAS-CAFIISICA 0.2.0-dev
 
 Executar START_LAS_CAFIISICA.bat ou LAS_CAFIISICA\LAS_CAFIISICA.exe.
 
 CRS de trabalho fixo: EPSG:3763.
 O CRS gravado no LAS/LAZ não altera o CRS de trabalho do projeto.
 
-Este marco abre LAS/LAZ, preserva a classificacao original apenas para diagnostico
-e mostra estatisticas reais. Ainda nao executa SMRF, CSF, PTD ou Fusion.
+Funcional:
+- abrir LAS/LAZ;
+- preservar a classificacao original;
+- estatisticas reais;
+- classificacao de terreno SMRF a partir da geometria;
+- classe 2 = solo, classe 1 = nao-solo;
+- exportacao para novo LAS/LAZ em EPSG:3763.
+
+A classificacao existente no ficheiro de entrada nao e usada pelo SMRF.

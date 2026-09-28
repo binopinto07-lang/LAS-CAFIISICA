@@ -8,7 +8,9 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from . import __version__
+from .classifiers.smrf import SMRFParams, run_smrf
 from .cloud.crs import WORKING_CRS
+from .cloud.exporter import export_classified
 from .cloud.loader import (
     IGNORE_INPUT_CLASSIFICATION,
     load_cloud,
@@ -115,6 +117,36 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
                     "Cloud statistics self-test failed"
                 )
             _ok(lines, "STATISTICS")
+
+            smrf = run_smrf(
+                cloud_las,
+                SMRFParams(
+                    cell=1.0,
+                    window=2.0,
+                    threshold=1.0,
+                    chunk_size=2,
+                ),
+            )
+            if smrf.point_count != 4:
+                raise RuntimeError("SMRF self-test failed")
+            _ok(lines, "SMRF")
+
+            classified_path = temp / "classified.las"
+            export_classified(
+                las_path,
+                classified_path,
+                smrf.model,
+            )
+            exported = laspy.read(classified_path)
+            exported_crs = exported.header.parse_crs()
+            if (
+                exported_crs is None
+                or exported_crs.to_epsg() != 3763
+            ):
+                raise RuntimeError(
+                    "Classified export CRS self-test failed"
+                )
+            _ok(lines, "CLASSIFIED_EXPORT")
 
         lines.extend(["", "RESULT=PASS"])
         report_path.write_text(
