@@ -44,7 +44,7 @@ las-cafiisica
 Esta branch usa:
 
 ```text
-LAS_CAFIISICA_GROUND_V2_2026_09_R1
+LAS_CAFIISICA_GROUND_V2_2026_09_R3
 ```
 
 O projeto continua sem depender de GitHub Actions.
