@@ -70,6 +70,8 @@ def _axelsson_acceptance(
     max_distance: float,
     max_angle_deg: float,
     min_triangle_edge: float,
+    candidate_normals: np.ndarray | None = None,
+    min_normal_alignment: float = 0.58,
 ) -> np.ndarray:
     metrics = tin.metrics(xyz[:, 0], xyz[:, 1], xyz[:, 2])
     simplex = metrics["simplex"]
@@ -94,12 +96,34 @@ def _axelsson_acceptance(
         )
     )
 
-    return (
+    accepted = (
         valid
         & (metrics["plane_distance"] <= max_distance)
         & (angle <= max_angle_deg)
         & (metrics["max_edge"] >= min_triangle_edge)
     )
+
+    if candidate_normals is not None:
+        candidate_normals = np.asarray(
+            candidate_normals,
+            dtype=np.float64,
+        )
+        known = np.all(np.isfinite(candidate_normals), axis=1)
+        if np.any(known):
+            alignment = np.zeros(xyz.shape[0], dtype=np.float64)
+            alignment[known] = np.abs(
+                np.einsum(
+                    "ij,ij->i",
+                    candidate_normals[known],
+                    normals[known],
+                )
+            )
+            accepted[
+                known
+                & (alignment < float(min_normal_alignment))
+            ] = False
+
+    return accepted
 
 
 def _adaptive_settings(
@@ -392,7 +416,40 @@ def run_adaptive_ptd(
         candidate_spacing,
     )
     candidate_xyz = sample_xyz[candidate_ids]
-    LOGGER.info("CANDIDATES=%d", candidate_xyz.shape[0])
+    candidate_normals = None
+    sample_source_indices = np.arange(
+        0,
+        cloud.point_count,
+        analysis.sample_stride,
+        dtype=np.int64,
+    )[: sample_xyz.shape[0]]
+    if sample_source_indices.size == sample_xyz.shape[0]:
+        try:
+            candidate_points = cloud.las.points[
+                sample_source_indices[candidate_ids]
+            ]
+            candidate_normals = point_normals(candidate_points)
+        except Exception:
+            LOGGER.exception(
+                "PTD candidate normal extraction failed; "
+                "continuing without normal gate"
+            )
+            candidate_normals = None
+
+    known_candidate_normals = (
+        int(
+            np.count_nonzero(
+                np.all(np.isfinite(candidate_normals), axis=1)
+            )
+        )
+        if candidate_normals is not None
+        else 0
+    )
+    LOGGER.info(
+        "CANDIDATES=%d PTD_NORMALS_AVAILABLE=%d",
+        candidate_xyz.shape[0],
+        known_candidate_normals,
+    )
 
     vertices = seed_xyz
     accepted_total = 0
@@ -414,6 +471,7 @@ def run_adaptive_ptd(
             ),
             max_angle_deg=params.max_iteration_angle_deg,
             min_triangle_edge=candidate_spacing * 0.75,
+            candidate_normals=candidate_normals,
         )
 
         if not np.any(accepted):
@@ -426,6 +484,8 @@ def run_adaptive_ptd(
         )
         added = vertices.shape[0] - previous_count
         candidate_xyz = candidate_xyz[~accepted]
+        if candidate_normals is not None:
+            candidate_normals = candidate_normals[~accepted]
         iterations = iteration
         accepted_total += max(0, added)
 
