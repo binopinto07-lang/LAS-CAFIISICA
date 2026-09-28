@@ -4,7 +4,10 @@ import laspy
 import numpy as np
 
 from las_classifier.cloud.loader import load_cloud
-from las_classifier.cloud.statistics import calculate_statistics
+from las_classifier.cloud.statistics import (
+    _crs_failure_label,
+    calculate_statistics,
+)
 
 
 def test_statistics_are_calculated_without_materializing_xyz(tmp_path):
@@ -39,3 +42,20 @@ def test_statistics_are_calculated_without_materializing_xyz(tmp_path):
     assert stats.approximate_xy_density == 0.04
     assert stats.approximate_point_spacing == 5.0
     assert "classification" in stats.dimensions
+
+
+def test_crs_error_keeps_unrecognized_epsg_code():
+    error = RuntimeError(
+        "Invalid projection: EPSG:11108: "
+        "(Internal Proj Error: proj_create: crs not found: EPSG:11108)"
+    )
+
+    assert _crs_failure_label(error) == (
+        "EPSG:11108 (não reconhecido pelo PROJ)"
+    )
+
+
+def test_crs_error_without_epsg_keeps_generic_failure():
+    error = ValueError("broken CRS metadata")
+
+    assert _crs_failure_label(error) == "Unavailable (ValueError)"

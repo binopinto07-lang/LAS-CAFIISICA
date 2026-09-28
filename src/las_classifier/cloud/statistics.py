@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from math import sqrt
 
@@ -10,6 +11,7 @@ from .model import CloudModel
 
 
 LOGGER = logging.getLogger("las_cafiisica.cloud.statistics")
+EPSG_PATTERN = re.compile(r"\bEPSG\s*:\s*(\d+)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,16 +77,27 @@ def _header_bounds(
     return minimum, maximum
 
 
+def _crs_failure_label(exc: Exception) -> str:
+    """Preserve a CRS authority code even when PROJ cannot resolve it."""
+
+    match = EPSG_PATTERN.search(str(exc))
+    if match:
+        return f"EPSG:{match.group(1)} (não reconhecido pelo PROJ)"
+    return f"Unavailable ({type(exc).__name__})"
+
+
 def _parse_crs(cloud: CloudModel) -> str:
     try:
         parsed = cloud.las.header.parse_crs()
     except Exception as exc:
+        label = _crs_failure_label(exc)
         LOGGER.warning(
-            "CRS_PARSE_FAILED=%s: %s",
+            "CRS_PARSE_FAILED=%s: %s | FALLBACK=%s",
             type(exc).__name__,
             exc,
+            label,
         )
-        return f"Unavailable ({type(exc).__name__})"
+        return label
     return "Unknown" if parsed is None else parsed.to_string()
 
 
