@@ -3,11 +3,9 @@ from __future__ import annotations
 import laspy
 import numpy as np
 
+from las_classifier.cloud.crs import WORKING_CRS, WORKING_EPSG
 from las_classifier.cloud.loader import load_cloud
-from las_classifier.cloud.statistics import (
-    _crs_failure_label,
-    calculate_statistics,
-)
+from las_classifier.cloud.statistics import calculate_statistics
 
 
 def test_statistics_are_calculated_without_materializing_xyz(tmp_path):
@@ -35,6 +33,7 @@ def test_statistics_are_calculated_without_materializing_xyz(tmp_path):
     assert stats.min_xyz == (0.0, 0.0, 100.0)
     assert stats.max_xyz == (10.0, 10.0, 110.0)
     assert stats.height_range == 10.0
+    assert stats.crs == "EPSG:3763"
     assert stats.original_class_histogram == {
         2: 2,
         5: 2,
@@ -44,18 +43,6 @@ def test_statistics_are_calculated_without_materializing_xyz(tmp_path):
     assert "classification" in stats.dimensions
 
 
-def test_crs_error_keeps_unrecognized_epsg_code():
-    error = RuntimeError(
-        "Invalid projection: EPSG:11108: "
-        "(Internal Proj Error: proj_create: crs not found: EPSG:11108)"
-    )
-
-    assert _crs_failure_label(error) == (
-        "EPSG:11108 (não reconhecido pelo PROJ)"
-    )
-
-
-def test_crs_error_without_epsg_keeps_generic_failure():
-    error = ValueError("broken CRS metadata")
-
-    assert _crs_failure_label(error) == "Unavailable (ValueError)"
+def test_working_crs_is_always_epsg_3763():
+    assert WORKING_EPSG == 3763
+    assert WORKING_CRS == "EPSG:3763"

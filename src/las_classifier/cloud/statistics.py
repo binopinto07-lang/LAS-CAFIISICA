@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from math import sqrt
 
 import numpy as np
 
+from .crs import WORKING_CRS
 from .model import CloudModel
 
 
 LOGGER = logging.getLogger("las_cafiisica.cloud.statistics")
-EPSG_PATTERN = re.compile(r"\bEPSG\s*:\s*(\d+)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,30 +76,6 @@ def _header_bounds(
     return minimum, maximum
 
 
-def _crs_failure_label(exc: Exception) -> str:
-    """Preserve a CRS authority code even when PROJ cannot resolve it."""
-
-    match = EPSG_PATTERN.search(str(exc))
-    if match:
-        return f"EPSG:{match.group(1)} (não reconhecido pelo PROJ)"
-    return f"Unavailable ({type(exc).__name__})"
-
-
-def _parse_crs(cloud: CloudModel) -> str:
-    try:
-        parsed = cloud.las.header.parse_crs()
-    except Exception as exc:
-        label = _crs_failure_label(exc)
-        LOGGER.warning(
-            "CRS_PARSE_FAILED=%s: %s | FALLBACK=%s",
-            type(exc).__name__,
-            exc,
-            label,
-        )
-        return label
-    return "Unknown" if parsed is None else parsed.to_string()
-
-
 def _classification_histogram(cloud: CloudModel) -> dict[int, int]:
     if cloud.original_class.size == 0:
         return {}
@@ -136,14 +111,14 @@ def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
         min_xyz=min_xyz,
         max_xyz=max_xyz,
         height_range=height_range,
-        crs=_parse_crs(cloud),
+        crs=WORKING_CRS,
         dimensions=tuple(cloud.las.point_format.dimension_names),
         original_class_histogram=_classification_histogram(cloud),
         approximate_xy_density=density,
         approximate_point_spacing=spacing,
     )
     LOGGER.info("BOUNDS=%s -> %s", result.min_xyz, result.max_xyz)
-    LOGGER.info("CRS=%s", result.crs)
+    LOGGER.info("WORKING_CRS=%s", result.crs)
     LOGGER.info(
         "AVAILABLE_DIMENSIONS=%s",
         ",".join(result.dimensions),

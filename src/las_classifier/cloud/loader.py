@@ -6,6 +6,7 @@ from pathlib import Path
 import laspy
 import numpy as np
 
+from .crs import WORKING_CRS
 from .model import CloudModel
 
 
@@ -15,7 +16,7 @@ SUPPORTED_EXTENSIONS = {".las", ".laz"}
 
 
 def load_cloud(path: str | Path) -> CloudModel:
-    """Read LAS/LAZ and preserve source classification without adopting it."""
+    """Read LAS/LAZ using EPSG:3763 as the fixed working CRS."""
 
     source = Path(path).expanduser().resolve()
     if source.suffix.lower() not in SUPPORTED_EXTENSIONS:
@@ -26,6 +27,7 @@ def load_cloud(path: str | Path) -> CloudModel:
         raise FileNotFoundError(source)
 
     LOGGER.info("INPUT_FILE=%s", source)
+    LOGGER.info("WORKING_CRS=%s", WORKING_CRS)
     las = laspy.read(source)
 
     if "classification" in las.point_format.dimension_names:

@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from . import __version__
+from .cloud.crs import WORKING_CRS
 from .cloud.loader import (
     IGNORE_INPUT_CLASSIFICATION,
     load_cloud,
@@ -51,6 +52,11 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
             raise RuntimeError(
                 "Input classification must be ignored by default"
             )
+        if WORKING_CRS != "EPSG:3763":
+            raise RuntimeError(
+                f"Invalid working CRS: {WORKING_CRS}"
+            )
+        _ok(lines, "WORKING_CRS_EPSG_3763")
 
         with TemporaryDirectory(
             prefix="las_cafiisica_selftest_"
@@ -103,6 +109,7 @@ def run_self_test(output_dir: str | Path | None = None) -> int:
             if (
                 stats.point_count != 4
                 or stats.height_range != 1.5
+                or stats.crs != "EPSG:3763"
             ):
                 raise RuntimeError(
                     "Cloud statistics self-test failed"

@@ -1,6 +1,9 @@
-LAS-CAFIISICA 0.1.0-dev
+LAS-CAFIISICA 0.1.3-dev
 
 Executar START_LAS_CAFIISICA.bat ou LAS_CAFIISICA\LAS_CAFIISICA.exe.
+
+CRS de trabalho fixo: EPSG:3763.
+O CRS gravado no LAS/LAZ não altera o CRS de trabalho do projeto.
 
 Este marco abre LAS/LAZ, preserva a classificacao original apenas para diagnostico
 e mostra estatisticas reais. Ainda nao executa SMRF, CSF, PTD ou Fusion.

@@ -197,7 +197,7 @@
     ]
   },
   "release": {},
-  "config_revision": 5,
+  "config_revision": 6,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -208,11 +208,12 @@
     "packaging/START_LAS_CAFIISICA.bat",
     "localbuild/las_cafiisica.json",
     "localbuild/SOURCE_REVISION.txt",
-    "src/las_classifier/cloud/worker.py"
+    "src/las_classifier/cloud/worker.py",
+    "src/las_classifier/cloud/crs.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R4"
+    "value": "LAS_CAFIISICA_BUILD_SOURCE_2026_09_R5"
   },
   "auto_bootstrap_python": true
 }
