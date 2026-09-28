@@ -44,3 +44,35 @@ def test_tin_query_uses_same_normalized_coordinate_system():
 
     assert np.all(metrics["valid"])
     assert np.max(metrics["plane_distance"]) < 1e-6
+
+
+def test_tin_handles_dense_near_collinear_vineyard_rows():
+    x = np.linspace(55488.783, 55918.072, 5000)
+    rows = []
+    for dy in (
+        0.0,
+        0.00001,
+        0.00002,
+        0.00003,
+        0.00004,
+        0.00005,
+        0.00006,
+        0.00007,
+    ):
+        y = np.full_like(x, 162281.029 + dy)
+        z = 177.0 + 0.08 * (x - x.min()) + 0.02 * dy
+        rows.append(np.column_stack((x, y, z)))
+
+    vertices = np.vstack(rows)
+    tin = TerrainTIN.build(vertices)
+
+    assert tin.triangle_count > 0
+    assert tin.xy_scale > 400.0
+
+    qx = np.array([55550.0, 55700.0, 55850.0])
+    qy = np.full(3, 162281.029035)
+    qz = 177.0 + 0.08 * (qx - 55488.783)
+    metrics = tin.metrics(qx, qy, qz)
+
+    assert np.all(metrics["valid"])
+    assert np.max(metrics["plane_distance"]) < 0.02
