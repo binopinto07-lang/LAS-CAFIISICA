@@ -112,11 +112,37 @@ def _adaptive_settings(
         if params.seed_resolution > 0
         else max(4.0, min(12.0, spacing * 35.0))
     )
-    candidate_spacing = (
-        params.candidate_spacing
-        if params.candidate_spacing > 0
-        else max(0.35, min(1.5, spacing * 7.0))
-    )
+    if params.candidate_spacing > 0:
+        candidate_spacing = params.candidate_spacing
+    else:
+        # Keep the global Delaunay tractable on 100M+ point projects. The
+        # spacing cap is derived from XY area, not point count, so high-density
+        # photogrammetry does not create millions of almost redundant TIN
+        # vertices. Higher quality presets raise the target vertex budget.
+        area = (
+            analysis.point_count / analysis.xy_density
+            if analysis.xy_density > 0
+            else 1.0
+        )
+        target_candidates = {
+            "fast": 180_000,
+            "balanced": 350_000,
+            "high": 650_000,
+            "extreme": 1_000_000,
+        }.get(params.quality, 350_000)
+        area_spacing = np.sqrt(
+            max(area, 1.0) / target_candidates
+        )
+        candidate_spacing = max(
+            0.35,
+            min(
+                1.75,
+                max(
+                    spacing * 7.0,
+                    float(area_spacing),
+                ),
+            ),
+        )
     max_edge = (
         params.max_triangle_edge
         if params.max_triangle_edge > 0
