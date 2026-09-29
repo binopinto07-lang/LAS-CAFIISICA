@@ -12,6 +12,7 @@ from typing import Callable
 
 import laspy
 import numpy as np
+from pyproj import CRS
 
 from .. import __version__
 from ..ground.ground_export import _synthetic_record
@@ -108,15 +109,10 @@ def _safe_viewer_header(source_header: laspy.LasHeader) -> laspy.LasHeader:
         np.floor(mins / 1000.0) * 1000.0
     ).astype(np.float64)
 
-    try:
-        crs = source_header.parse_crs()
-        if crs is not None:
-            header.add_crs(crs)
-    except Exception:
-        LOGGER.warning(
-            "VIEWER_CRS_COPY_FAILED",
-            exc_info=True,
-        )
+    # The application works exclusively in ETRS89 / Portugal TM06.
+    # Do not trust malformed source CRS VLRs in preview caches (some valid
+    # production clouds contain stale GeoKey values such as EPSG:11108).
+    header.add_crs(CRS.from_epsg(3763))
 
     return header
 

@@ -21,11 +21,11 @@ ProgressCallback = Callable[[int, str], None]
 class L3RecoveryParams:
     sample_target: int = 3_000_000
     voxel_size: float = 0.50
-    max_plane_distance: float = 0.25
+    max_plane_distance: float = 0.28
     min_points_per_voxel: int = 3
-    min_seed_fraction: float = 0.08
-    min_geometry_score: float = 0.35
+    min_geometry_score: float = 0.28
     strong_geometry_score: float = 0.62
+    min_strong_fraction: float = 0.20
 
 
 @dataclass(slots=True)
@@ -105,6 +105,10 @@ class L3RecoveryModel:
             points.number_of_returns,
             dtype=np.int16,
         )
+
+        # Return position is evidence only. A last/only return can still be
+        # vegetation, therefore it must additionally lie in a geometry-approved
+        # voxel created from the PTD surface.
         last_or_only = (
             (nr > 0)
             & (rn > 0)
@@ -117,12 +121,6 @@ class L3RecoveryModel:
                 points.withheld,
                 dtype=np.bool_,
             )
-        if "classification" in names:
-            source_class = np.asarray(
-                points.classification,
-                dtype=np.uint8,
-            )
-            valid &= source_class != 7
 
         keys, inside = self._encode_xyz(
             x,
@@ -226,7 +224,7 @@ def build_l3_recovery(
 
     if progress is not None:
         progress(
-            64,
+            62,
             (
                 "L3 recovery: sampling measured "
                 f"returns ({indices.size:,})"
@@ -259,12 +257,9 @@ def build_l3_recovery(
             points.withheld,
             dtype=np.bool_,
         )
-    source_class = np.asarray(
-        points.classification,
-        dtype=np.uint8,
-    )
-    allowed &= source_class != 7
 
+    # Classification is deliberately NOT used here. The input class is kept
+    # only as provenance/diagnostics elsewhere in the application.
     score, metrics = ptd_model._confidence(
         x,
         y,
@@ -349,35 +344,42 @@ def build_l3_recovery(
         minlength=unique_keys.size,
     ).astype(np.int64)
 
-    seed_flags = (
-        source_class[candidate_ids] == 2
-    ).astype(np.int64)
-    seed_counts = np.bincount(
-        inverse,
-        weights=seed_flags,
-        minlength=unique_keys.size,
-    )
-
+    candidate_score = score[candidate_ids]
     score_sums = np.bincount(
         inverse,
-        weights=score[candidate_ids],
+        weights=candidate_score,
         minlength=unique_keys.size,
     )
     mean_score = score_sums / np.maximum(
         counts,
         1,
     )
-    seed_fraction = seed_counts / np.maximum(
+
+    strong_flags = (
+        candidate_score
+        >= params.strong_geometry_score
+    ).astype(np.float64)
+    strong_counts = np.bincount(
+        inverse,
+        weights=strong_flags,
+        minlength=unique_keys.size,
+    )
+    strong_fraction = strong_counts / np.maximum(
         counts,
         1,
     )
 
+    # A voxel is accepted only from geometric evidence. This prevents an
+    # incorrect source classification from propagating into the recovered
+    # terrain while still allowing genuine last/only returns near the PTD.
     approved = (
         counts >= params.min_points_per_voxel
     ) & (
+        mean_score >= params.min_geometry_score
+    ) & (
         (
-            seed_fraction
-            >= params.min_seed_fraction
+            strong_fraction
+            >= params.min_strong_fraction
         )
         | (
             mean_score
@@ -394,24 +396,25 @@ def build_l3_recovery(
     LOGGER.info(
         "L3_RECOVERY source=%s candidates=%d "
         "candidate_voxels=%d approved_voxels=%d "
-        "seeded_voxels=%d",
+        "strong_voxels=%d classification_input_used=0",
         inspection.source_type.value,
         int(candidate_ids.size),
         int(unique_keys.size),
         int(approved_keys.size),
         int(
             np.count_nonzero(
-                seed_counts > 0
+                strong_fraction
+                >= params.min_strong_fraction
             )
         ),
     )
 
     if progress is not None:
         progress(
-            72,
+            68,
             (
                 "L3 recovery: "
-                f"{approved_keys.size:,} approved voxels"
+                f"{approved_keys.size:,} geometry-approved voxels"
             ),
         )
 

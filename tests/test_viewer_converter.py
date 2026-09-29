@@ -132,6 +132,7 @@ def test_original_viewer_is_normalized_for_potree_bounds(tmp_path):
         viewer.header.scales,
         [0.001, 0.001, 0.001],
     )
+    assert viewer.header.parse_crs().to_epsg() == 3763
     assert np.all(np.isfinite(viewer.x))
     assert np.all(np.isfinite(viewer.y))
     assert np.all(np.isfinite(viewer.z))

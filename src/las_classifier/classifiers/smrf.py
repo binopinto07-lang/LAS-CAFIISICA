@@ -765,6 +765,8 @@ def run_smrf(
     cloud: CloudModel,
     params: SMRFParams | None = None,
     progress: ProgressCallback | None = None,
+    *,
+    count_full: bool = True,
 ) -> SMRFResult:
     params = params or SMRFParams()
     params.validate()
@@ -1002,50 +1004,53 @@ def run_smrf(
 
     ground_count = 0
     total = cloud.point_count
-    for _, stop, x, y, z in _iter_scaled_xyz(
-        cloud,
-        params.chunk_size,
-    ):
-        classes = (
-            model.classify_xyz(
-                x,
-                y,
-                z,
-            )
-        )
-        ground_count += int(
-            np.count_nonzero(
-                classes
-                == GROUND_CLASS
-            )
-        )
-        _emit(
-            progress,
-            (
-                (
-                    86
-                    + int(
-                        14
-                        * stop
-                        / total
-                    )
-                    if terrain3d is not None
-                    else 64
-                    + int(
-                        36
-                        * stop
-                        / total
-                    )
+    if count_full:
+        for _, stop, x, y, z in _iter_scaled_xyz(
+            cloud,
+            params.chunk_size,
+        ):
+            classes = (
+                model.classify_xyz(
+                    x,
+                    y,
+                    z,
                 )
-            ),
-            (
-                "SMRF classify: "
-                f"{stop:,}/{total:,}"
-            ),
-        )
+            )
+            ground_count += int(
+                np.count_nonzero(
+                    classes
+                    == GROUND_CLASS
+                )
+            )
+            _emit(
+                progress,
+                (
+                    (
+                        86
+                        + int(
+                            14
+                            * stop
+                            / total
+                        )
+                        if terrain3d is not None
+                        else 64
+                        + int(
+                            36
+                            * stop
+                            / total
+                        )
+                    )
+                ),
+                (
+                    "SMRF classify: "
+                    f"{stop:,}/{total:,}"
+                ),
+            )
 
     non_ground_count = (
         total - ground_count
+        if count_full
+        else 0
     )
     elapsed = (
         perf_counter()

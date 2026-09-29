@@ -23,6 +23,7 @@ from .adaptive_ptd import (
     run_adaptive_ptd,
 )
 from .csf_engine import CSFModel, run_csf
+from .smrf import SMRFModel, SMRFParams, run_smrf
 from .terrain3d import (
     Terrain3DParams,
     Terrain3DRefinement,
@@ -30,7 +31,9 @@ from .terrain3d import (
 )
 
 
-LOGGER = logging.getLogger("las_cafiisica.classifiers.hybrid_ground")
+LOGGER = logging.getLogger(
+    "las_cafiisica.classifiers.hybrid_ground"
+)
 ProgressCallback = Callable[[int, str], None]
 
 
@@ -40,7 +43,10 @@ def _emit(
     message: str,
 ) -> None:
     if callback is not None:
-        callback(max(0, min(100, int(percent))), message)
+        callback(
+            max(0, min(100, int(percent))),
+            message,
+        )
 
 
 def _l3_params(
@@ -51,76 +57,128 @@ def _l3_params(
         return L3RecoveryParams(
             sample_target=8_000_000,
             voxel_size=0.35,
-            max_plane_distance=0.22,
+            max_plane_distance=0.25,
             min_points_per_voxel=3,
-            min_seed_fraction=0.06,
-            min_geometry_score=0.30,
-            strong_geometry_score=0.58,
+            min_geometry_score=0.26,
+            strong_geometry_score=0.60,
+            min_strong_fraction=0.16,
         )
     if quality == "high":
         return L3RecoveryParams(
             sample_target=5_000_000,
-            voxel_size=0.45,
-            max_plane_distance=0.24,
+            voxel_size=0.40,
+            max_plane_distance=0.26,
             min_points_per_voxel=3,
-            min_seed_fraction=0.08,
-            min_geometry_score=0.32,
-            strong_geometry_score=0.60,
+            min_geometry_score=0.27,
+            strong_geometry_score=0.61,
+            min_strong_fraction=0.18,
         )
     if quality == "fast":
         return L3RecoveryParams(
             sample_target=1_000_000,
             voxel_size=0.75,
-            max_plane_distance=0.28,
+            max_plane_distance=0.30,
             min_points_per_voxel=4,
-            min_seed_fraction=0.12,
-            min_geometry_score=0.38,
-            strong_geometry_score=0.66,
+            min_geometry_score=0.34,
+            strong_geometry_score=0.67,
+            min_strong_fraction=0.25,
         )
     return L3RecoveryParams()
+
+
+def _smrf_params(
+    params: GroundEngineParams,
+    inspection: SourceInspection,
+) -> SMRFParams:
+    # SMRF is used as an independent vote only. Terrain3D is explicitly
+    # disabled here so a coherent canopy cannot become ground merely because
+    # its normals form a surface.
+    if inspection.source_type is SourceType.P1_PHOTOGRAMMETRY:
+        return SMRFParams(
+            cell=0.60,
+            slope=0.18,
+            window=14.0,
+            threshold=0.28,
+            scalar=1.15,
+            fill_spacing=max(
+                params.synthetic_spacing or 0.25,
+                0.20,
+            ),
+            chunk_size=params.chunk_size,
+            terrain3d_enabled=False,
+        )
+    if inspection.source_type is SourceType.L3_LIDAR:
+        return SMRFParams(
+            cell=0.50,
+            slope=0.20,
+            window=14.0,
+            threshold=0.32,
+            scalar=1.20,
+            fill_spacing=max(
+                params.synthetic_spacing or 0.25,
+                0.20,
+            ),
+            chunk_size=params.chunk_size,
+            terrain3d_enabled=False,
+        )
+    return SMRFParams(
+        cell=0.60,
+        slope=0.18,
+        window=14.0,
+        threshold=0.30,
+        scalar=1.20,
+        fill_spacing=max(
+            params.synthetic_spacing or 0.25,
+            0.20,
+        ),
+        chunk_size=params.chunk_size,
+        terrain3d_enabled=False,
+    )
 
 
 def _terrain3d_params(
     params: GroundEngineParams,
 ) -> Terrain3DParams:
+    # For photogrammetry Terrain3D is a SUPPORT GATE, never a positive rescue.
+    # Deliberately stricter than the previous R15 settings.
     quality = params.quality
     if quality == "extreme":
         return Terrain3DParams(
-            voxel=0.35,
-            surface_thickness=0.12,
-            min_points=4,
-            coherence=0.55,
-            seed_ground_fraction=0.40,
-            max_normal_angle_deg=88.0,
+            voxel=0.30,
+            surface_thickness=0.09,
+            min_points=6,
+            coherence=0.80,
+            seed_ground_fraction=0.68,
+            max_normal_angle_deg=80.0,
             target_sample_points=30_000_000,
         )
     if quality == "high":
         return Terrain3DParams(
-            voxel=0.40,
-            surface_thickness=0.14,
-            min_points=4,
-            coherence=0.58,
-            seed_ground_fraction=0.45,
-            max_normal_angle_deg=88.0,
+            voxel=0.35,
+            surface_thickness=0.10,
+            min_points=6,
+            coherence=0.79,
+            seed_ground_fraction=0.68,
+            max_normal_angle_deg=80.0,
             target_sample_points=20_000_000,
         )
     if quality == "fast":
         return Terrain3DParams(
             voxel=0.75,
-            surface_thickness=0.18,
-            min_points=5,
-            coherence=0.65,
-            seed_ground_fraction=0.55,
-            max_normal_angle_deg=86.0,
+            surface_thickness=0.14,
+            min_points=6,
+            coherence=0.82,
+            seed_ground_fraction=0.72,
+            max_normal_angle_deg=78.0,
             target_sample_points=6_000_000,
         )
     return Terrain3DParams(
-        voxel=0.50,
-        surface_thickness=0.16,
-        min_points=5,
-        coherence=0.62,
-        seed_ground_fraction=0.50,
-        max_normal_angle_deg=88.0,
+        voxel=0.45,
+        surface_thickness=0.11,
+        min_points=6,
+        coherence=0.80,
+        seed_ground_fraction=0.70,
+        max_normal_angle_deg=80.0,
         target_sample_points=12_000_000,
     )
 
@@ -130,18 +188,172 @@ class HybridGroundModel:
     params: GroundEngineParams
     ptd: AdaptivePTDModel
     csf: CSFModel
+    smrf: SMRFModel
     terrain3d: Terrain3DRefinement | None = None
     l3_recovery: L3RecoveryModel | None = None
     source_inspection: SourceInspection | None = None
     engine_name: str = "Hybrid"
 
     @property
+    def _source_type(self) -> SourceType:
+        if self.source_inspection is None:
+            return SourceType.UNKNOWN
+        return self.source_inspection.source_type
+
+    @property
     def synthetic_fill_point_count(self) -> int:
+        # A P1 canopy can be the only observed surface. Until an observability
+        # model proves that a missing patch is safely reconstructable, do not
+        # manufacture a hidden terrain surface from photogrammetry.
+        if self._source_type is SourceType.P1_PHOTOGRAMMETRY:
+            return 0
         return self.ptd.synthetic_fill_point_count
 
     @property
     def effective_fill_spacing(self) -> float:
         return self.ptd.effective_fill_spacing
+
+    def _evidence(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+        points=None,
+    ) -> dict[str, np.ndarray]:
+        ptd_score, _ = self.ptd._confidence(
+            x,
+            y,
+            z,
+            points=points,
+        )
+        csf_score = self.csf.confidence_xyz(
+            x,
+            y,
+            z,
+        )
+        smrf_ground = (
+            self.smrf.classify_xyz(
+                x,
+                y,
+                z,
+            )
+            == GROUND_CLASS
+        )
+
+        ptd_ground = (
+            ptd_score
+            >= self.params.confidence_threshold
+        )
+        ptd_strong = ptd_score >= max(
+            0.84,
+            self.params.confidence_threshold + 0.16,
+        )
+        csf_ground = csf_score >= 0.50
+
+        votes = (
+            ptd_ground.astype(np.uint8)
+            + csf_ground.astype(np.uint8)
+            + smrf_ground.astype(np.uint8)
+        )
+
+        terrain_support = np.zeros(
+            x.shape[0],
+            dtype=np.bool_,
+        )
+        if self.terrain3d is not None:
+            terrain_support = self.terrain3d.ground_mask(
+                x,
+                y,
+                z,
+            )
+
+        l3_recovered = np.zeros(
+            x.shape[0],
+            dtype=np.bool_,
+        )
+        if (
+            self.l3_recovery is not None
+            and points is not None
+        ):
+            l3_recovered = (
+                self.l3_recovery.recovered_mask(
+                    points,
+                    x,
+                    y,
+                    z,
+                )
+            )
+
+        return {
+            "ptd_score": ptd_score,
+            "csf_score": csf_score,
+            "smrf_ground": smrf_ground,
+            "ptd_ground": ptd_ground,
+            "ptd_strong": ptd_strong,
+            "csf_ground": csf_ground,
+            "votes": votes,
+            "terrain_support": terrain_support,
+            "l3_recovered": l3_recovered,
+        }
+
+    def _ground_mask_from_evidence(
+        self,
+        e: dict[str, np.ndarray],
+    ) -> np.ndarray:
+        ptd_score = e["ptd_score"]
+        ptd_strong = e["ptd_strong"]
+        csf_ground = e["csf_ground"]
+        smrf_ground = e["smrf_ground"]
+        votes = e["votes"]
+        source_type = self._source_type
+
+        if source_type is SourceType.P1_PHOTOGRAMMETRY:
+            # P1: never interpret a coherent visible canopy as hidden ground.
+            # Require PTD geometric support plus at least one independent
+            # filter. When trustworthy normals exist, the 3D surface acts only
+            # as an additional support gate, never as a rescue by itself.
+            base = (
+                (votes >= 2)
+                & (ptd_score >= 0.40)
+            )
+            if self.terrain3d is not None:
+                base &= (
+                    e["terrain_support"]
+                    | ptd_strong
+                )
+            return (
+                base
+                | (
+                    ptd_strong
+                    & csf_ground
+                    & smrf_ground
+                )
+            )
+
+        if source_type is SourceType.L3_LIDAR:
+            # L3: two independent geometric votes are enough. A measured
+            # last/only return can additionally recover a point, but only when
+            # at least one independent surface filter or moderate PTD support
+            # agrees. Return position alone is never ground.
+            consensus = votes >= 2
+            recovered = (
+                e["l3_recovered"]
+                & (
+                    csf_ground
+                    | smrf_ground
+                    | (ptd_score >= 0.45)
+                )
+            )
+            return (
+                consensus
+                | recovered
+                | ptd_strong
+            )
+
+        return (
+            (votes >= 2)
+            | ptd_strong
+        )
 
     def _score(
         self,
@@ -150,58 +362,92 @@ class HybridGroundModel:
         z: np.ndarray,
         points=None,
     ) -> np.ndarray:
-        ptd_score, _ = self.ptd._confidence(
+        e = self._evidence(
             x,
             y,
             z,
             points=points,
         )
-        csf_score = self.csf.confidence_xyz(x, y, z)
-
-        score = 0.84 * ptd_score + 0.16 * csf_score
-
-        # The 2.5D PTD remains the authority for ordinary terrain. It cannot,
-        # however, represent vertical or near-vertical vineyard/talude faces
-        # because a Delaunay TIN over XY has only one Z for each XY location.
-        unsupported_2d = ptd_score < 0.35
-        score[unsupported_2d] = 0.0
-        strong_ptd = ptd_score >= 0.88
-        score[strong_ptd] = np.maximum(
-            score[strong_ptd],
-            ptd_score[strong_ptd],
+        score = (
+            0.50 * e["ptd_score"]
+            + 0.25 * e["csf_score"]
+            + 0.25 * e["smrf_ground"].astype(
+                np.float64
+            )
         )
 
-        # Hybrid V2 structural rescue: grow a true 3-D surface through voxels
-        # with coherent normals that are connected to reliable PTD ground.
-        # This is the path that keeps retaining walls, terrace faces and steep
-        # taludes without relaxing the vegetation thresholds globally.
-        if self.terrain3d is not None:
-            terrain3d_ground = self.terrain3d.ground_mask(
-                x,
-                y,
-                z,
+        if self._source_type is SourceType.L3_LIDAR:
+            score[e["l3_recovered"]] = np.maximum(
+                score[e["l3_recovered"]],
+                0.82,
             )
-            score[terrain3d_ground] = np.maximum(
-                score[terrain3d_ground],
-                0.99,
+        elif (
+            self._source_type
+            is SourceType.P1_PHOTOGRAMMETRY
+            and self.terrain3d is not None
+        ):
+            unsupported = (
+                ~e["terrain_support"]
+                & ~e["ptd_strong"]
             )
+            score[unsupported] *= 0.55
 
-        # L3 recovery uses measured return position as evidence, never as a
-        # stand-alone rule. Only voxels already supported by PTD geometry and
-        # local measured-return consistency are eligible.
-        if self.l3_recovery is not None and points is not None:
-            recovered = self.l3_recovery.recovered_mask(
-                points,
-                x,
-                y,
-                z,
-            )
-            score[recovered] = np.maximum(
-                score[recovered],
-                0.995,
-            )
+        ground = self._ground_mask_from_evidence(e)
+        score[ground] = np.maximum(
+            score[ground],
+            0.80,
+        )
+        score[~ground] = np.minimum(
+            score[~ground],
+            0.49,
+        )
+        return np.clip(
+            score,
+            0.0,
+            1.0,
+        )
 
-        return np.clip(score, 0.0, 1.0)
+    def classify_xyz(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        e = self._evidence(
+            x,
+            y,
+            z,
+        )
+        ground = self._ground_mask_from_evidence(e)
+        classes = np.full(
+            x.shape[0],
+            NON_GROUND_CLASS,
+            dtype=np.uint8,
+        )
+        classes[ground] = GROUND_CLASS
+        return classes
+
+    def classify_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        e = self._evidence(
+            x,
+            y,
+            z,
+            points=points,
+        )
+        ground = self._ground_mask_from_evidence(e)
+        classes = np.full(
+            x.shape[0],
+            NON_GROUND_CLASS,
+            dtype=np.uint8,
+        )
+        classes[ground] = GROUND_CLASS
+        return classes
 
     def confidence_xyz(
         self,
@@ -209,7 +455,11 @@ class HybridGroundModel:
         y: np.ndarray,
         z: np.ndarray,
     ) -> np.ndarray:
-        return self._score(x, y, z)
+        return self._score(
+            x,
+            y,
+            z,
+        )
 
     def confidence_points(
         self,
@@ -225,50 +475,14 @@ class HybridGroundModel:
             points=points,
         )
 
-    def classify_xyz(
-        self,
-        x: np.ndarray,
-        y: np.ndarray,
-        z: np.ndarray,
-    ) -> np.ndarray:
-        score = self._score(x, y, z)
-        classes = np.full(
-            x.shape[0],
-            NON_GROUND_CLASS,
-            dtype=np.uint8,
-        )
-        classes[
-            score >= self.params.confidence_threshold
-        ] = GROUND_CLASS
-        return classes
-
-    def classify_points(
-        self,
-        points,
-        x: np.ndarray,
-        y: np.ndarray,
-        z: np.ndarray,
-    ) -> np.ndarray:
-        score = self._score(
-            x,
-            y,
-            z,
-            points=points,
-        )
-        classes = np.full(
-            x.shape[0],
-            NON_GROUND_CLASS,
-            dtype=np.uint8,
-        )
-        classes[
-            score >= self.params.confidence_threshold
-        ] = GROUND_CLASS
-        return classes
-
     def iter_synthetic_fill_xyz(self):
+        if self._source_type is SourceType.P1_PHOTOGRAMMETRY:
+            return
         yield from self.ptd.iter_synthetic_fill_xyz()
 
     def iter_viewer_synthetic_fill_xyz(self):
+        if self._source_type is SourceType.P1_PHOTOGRAMMETRY:
+            return
         yield from self.ptd.iter_viewer_synthetic_fill_xyz()
 
 
@@ -292,6 +506,10 @@ class HybridGroundResult:
     terrain3d_seed_voxel_count: int = 0
     l3_recovered_count: int = 0
     l3_recovery_voxel_count: int = 0
+    ptd_vote_count: int = 0
+    smrf_vote_count: int = 0
+    csf_vote_count: int = 0
+    consensus_2of3_count: int = 0
     source_type: str = "UNKNOWN"
     source_confidence: float = 0.0
     engine_name: str = "Hybrid"
@@ -299,7 +517,10 @@ class HybridGroundResult:
 
     @property
     def point_count(self) -> int:
-        return self.ground_count + self.non_ground_count
+        return (
+            self.ground_count
+            + self.non_ground_count
+        )
 
 
 def run_hybrid_ground(
@@ -311,7 +532,8 @@ def run_hybrid_ground(
     params = params or GroundEngineParams()
     started = perf_counter()
     LOGGER.info("GROUND_ENGINE_START")
-    LOGGER.info("GROUND_ENGINE=HYBRID_SENSOR_AWARE")
+    LOGGER.info("GROUND_ENGINE=HYBRID_CONSENSUS_R1")
+
     inspection = inspect_source(
         cloud,
         override=source_override,
@@ -323,10 +545,13 @@ def run_hybrid_ground(
         "; ".join(inspection.evidence),
     )
 
-    def ptd_progress(percent: int, message: str) -> None:
+    def ptd_progress(
+        percent: int,
+        message: str,
+    ) -> None:
         _emit(
             progress,
-            int(percent * 0.52),
+            int(percent * 0.35),
             message,
         )
 
@@ -337,10 +562,13 @@ def run_hybrid_ground(
         count_full=False,
     )
 
-    def csf_progress(percent: int, message: str) -> None:
+    def csf_progress(
+        percent: int,
+        message: str,
+    ) -> None:
         _emit(
             progress,
-            52 + int(percent * 0.10),
+            35 + int(percent * 0.10),
             message,
         )
 
@@ -351,11 +579,26 @@ def run_hybrid_ground(
         count_full=False,
     )
 
-    _emit(
-        progress,
-        63,
-        "Hybrid: sensor-aware measured ground recovery",
+    def smrf_progress(
+        percent: int,
+        message: str,
+    ) -> None:
+        _emit(
+            progress,
+            45 + int(percent * 0.15),
+            message,
+        )
+
+    smrf_result = run_smrf(
+        cloud,
+        _smrf_params(
+            params,
+            inspection,
+        ),
+        smrf_progress,
+        count_full=False,
     )
+
     l3_recovery = build_l3_recovery(
         cloud,
         ptd_result.model,
@@ -364,22 +607,28 @@ def run_hybrid_ground(
         _l3_params(params),
     )
 
-    _emit(
-        progress,
-        72,
-        "Hybrid: building true 3D terrain surface",
-    )
-    terrain3d = build_terrain3d_refinement(
-        cloud,
-        ptd_result.model,
-        progress,
-        _terrain3d_params(params),
-    )
+    terrain3d = None
+    if (
+        inspection.source_type
+        is SourceType.P1_PHOTOGRAMMETRY
+    ):
+        _emit(
+            progress,
+            69,
+            "P1: validating coherent measured surfaces",
+        )
+        terrain3d = build_terrain3d_refinement(
+            cloud,
+            ptd_result.model,
+            progress,
+            _terrain3d_params(params),
+        )
 
     model = HybridGroundModel(
         params=params,
         ptd=ptd_result.model,
         csf=csf_result.model,
+        smrf=smrf_result.model,
         terrain3d=terrain3d,
         l3_recovery=l3_recovery,
         source_inspection=inspection,
@@ -390,16 +639,19 @@ def run_hybrid_ground(
     confidence_sum = 0.0
     confidence_n = 0
     l3_recovered_count = 0
+    ptd_vote_count = 0
+    smrf_vote_count = 0
+    csf_vote_count = 0
+    consensus_2of3_count = 0
+
     scales = cloud.las.header.scales
     offsets = cloud.las.header.offsets
 
     _emit(
         progress,
-        87 if terrain3d is not None else 77,
-        "Hybrid 2.5D + 3D: validating ground",
+        80,
+        "Hybrid consensus: validating every measured point",
     )
-    validation_start = 87 if terrain3d is not None else 77
-    validation_span = 12 if terrain3d is not None else 22
 
     for start in range(
         0,
@@ -436,41 +688,52 @@ def run_hybrid_ground(
             + offsets[2]
         )
 
-        if model.l3_recovery is not None:
-            l3_mask = model.l3_recovery.recovered_mask(
-                points,
-                x,
-                y,
-                z,
-            )
-            source_class = np.asarray(
-                points.classification,
-                dtype=np.uint8,
-            )
-            l3_recovered_count += int(
-                np.count_nonzero(
-                    l3_mask
-                    & (source_class != GROUND_CLASS)
-                )
-            )
-
-        classes = model.classify_points(
-            points,
-            x,
-            y,
-            z,
-        )
-        ground_count += int(
-            np.count_nonzero(
-                classes == GROUND_CLASS
-            )
-        )
-
-        score = model._score(
+        evidence = model._evidence(
             x,
             y,
             z,
             points=points,
+        )
+        ground = model._ground_mask_from_evidence(
+            evidence
+        )
+        ground_count += int(
+            np.count_nonzero(ground)
+        )
+
+        ptd_vote_count += int(
+            np.count_nonzero(
+                evidence["ptd_ground"]
+            )
+        )
+        smrf_vote_count += int(
+            np.count_nonzero(
+                evidence["smrf_ground"]
+            )
+        )
+        csf_vote_count += int(
+            np.count_nonzero(
+                evidence["csf_ground"]
+            )
+        )
+        consensus_2of3_count += int(
+            np.count_nonzero(
+                evidence["votes"] >= 2
+            )
+        )
+        l3_recovered_count += int(
+            np.count_nonzero(
+                evidence["l3_recovered"]
+            )
+        )
+
+        score = (
+            0.50 * evidence["ptd_score"]
+            + 0.25 * evidence["csf_score"]
+            + 0.25
+            * evidence["smrf_ground"].astype(
+                np.float64
+            )
         )
         confidence_sum += float(
             np.sum(score)
@@ -479,14 +742,14 @@ def run_hybrid_ground(
 
         _emit(
             progress,
-            validation_start
+            80
             + int(
-                validation_span
+                19
                 * stop
                 / max(1, total)
             ),
             (
-                "Hybrid 2.5D + 3D validate "
+                "Hybrid consensus "
                 f"{stop:,}/{total:,}"
             ),
         )
@@ -510,15 +773,25 @@ def run_hybrid_ground(
         else 0
     )
 
-    LOGGER.info("GROUND_REAL=%d", ground_count)
-    LOGGER.info("NON_GROUND=%d", non_ground)
     LOGGER.info(
-        "TERRAIN3D_VOXELS=%d TERRAIN3D_SEEDS=%d",
+        "CONSENSUS_VOTES PTD=%d SMRF=%d CSF=%d TWO_OF_THREE=%d",
+        ptd_vote_count,
+        smrf_vote_count,
+        csf_vote_count,
+        consensus_2of3_count,
+    )
+    LOGGER.info(
+        "GROUND_REAL=%d NON_GROUND=%d",
+        ground_count,
+        non_ground,
+    )
+    LOGGER.info(
+        "TERRAIN3D_SUPPORT_VOXELS=%d TERRAIN3D_SEEDS=%d",
         terrain3d_voxels,
         terrain3d_seeds,
     )
     LOGGER.info(
-        "L3_RECOVERED=%d L3_RECOVERY_VOXELS=%d",
+        "L3_RETURN_SUPPORTED_POINTS=%d L3_RECOVERY_VOXELS=%d",
         l3_recovered_count,
         (
             model.l3_recovery.approved_voxel_count
@@ -527,20 +800,16 @@ def run_hybrid_ground(
         ),
     )
     LOGGER.info(
-        "GAPS_TOTAL=%d GAPS_SUPPORTED=%d "
-        "GAPS_OCCLUDED=%d GAPS_REJECTED=%d",
-        ptd_result.detected_gap_count,
-        ptd_result.supported_gap_count,
-        ptd_result.occluded_gap_count,
-        ptd_result.rejected_gap_count,
+        "INPUT_CLASSIFICATION_USED=0"
     )
     LOGGER.info(
-        "SYNTHETIC_POINTS=%d",
-        model.synthetic_fill_point_count,
-    )
-    LOGGER.info(
-        "GROUND_CONFIDENCE_MEAN=%.4f",
-        mean_confidence,
+        "P1_SYNTHETIC_POLICY=%s",
+        (
+            "DISABLED_UNTIL_OBSERVABILITY"
+            if inspection.source_type
+            is SourceType.P1_PHOTOGRAMMETRY
+            else "PTD_SUPPORTED_GAPS"
+        ),
     )
     LOGGER.info(
         "PROCESSING_TIME=%.3f",
@@ -550,7 +819,7 @@ def run_hybrid_ground(
     _emit(
         progress,
         100,
-        "Hybrid 2.5D + 3D ground complete",
+        "Hybrid consensus complete",
     )
     return HybridGroundResult(
         model=model,
@@ -585,6 +854,10 @@ def run_hybrid_ground(
             if model.l3_recovery is not None
             else 0
         ),
+        ptd_vote_count=ptd_vote_count,
+        smrf_vote_count=smrf_vote_count,
+        csf_vote_count=csf_vote_count,
+        consensus_2of3_count=consensus_2of3_count,
         source_type=inspection.source_type.value,
         source_confidence=inspection.confidence,
     )

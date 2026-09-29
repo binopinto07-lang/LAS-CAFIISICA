@@ -17,9 +17,16 @@ from las_classifier.terrain.schema import (
 class _PTD:
     def _confidence(self, x, y, z, points=None):
         count = x.size
-        score = np.full(count, 0.80, dtype=np.float64)
+        score = np.full(
+            count,
+            0.80,
+            dtype=np.float64,
+        )
         metrics = {
-            "valid": np.ones(count, dtype=np.bool_),
+            "valid": np.ones(
+                count,
+                dtype=np.bool_,
+            ),
             "plane_distance": np.full(
                 count,
                 0.05,
@@ -51,21 +58,50 @@ def _inspection(source_type: SourceType) -> SourceInspection:
     )
 
 
-def _cloud(path):
+def _cloud(path, classifications=None):
     header = laspy.LasHeader(
         point_format=3,
         version="1.2",
     )
     header.generating_software = "DJI Terra"
     las = laspy.LasData(header)
-    las.x = np.array([10.00, 10.05, 10.10, 10.15])
-    las.y = np.array([20.00, 20.04, 20.08, 20.12])
-    las.z = np.array([100.00, 100.02, 100.04, 100.06])
-    las.classification = np.array([2, 1, 1, 1], dtype=np.uint8)
-    las.return_number = np.array([2, 2, 2, 1], dtype=np.uint8)
-    las.number_of_returns = np.array([2, 2, 2, 2], dtype=np.uint8)
+    las.x = np.array(
+        [10.00, 10.05, 10.10, 10.15]
+    )
+    las.y = np.array(
+        [20.00, 20.04, 20.08, 20.12]
+    )
+    las.z = np.array(
+        [100.00, 100.02, 100.04, 100.06]
+    )
+    las.classification = np.asarray(
+        classifications
+        if classifications is not None
+        else [2, 1, 1, 1],
+        dtype=np.uint8,
+    )
+    las.return_number = np.array(
+        [2, 2, 2, 1],
+        dtype=np.uint8,
+    )
+    las.number_of_returns = np.array(
+        [2, 2, 2, 2],
+        dtype=np.uint8,
+    )
     las.write(path)
     return load_cloud(path)
+
+
+def _params():
+    return L3RecoveryParams(
+        sample_target=100,
+        voxel_size=0.50,
+        max_plane_distance=0.25,
+        min_points_per_voxel=2,
+        min_geometry_score=0.30,
+        strong_geometry_score=0.60,
+        min_strong_fraction=0.20,
+    )
 
 
 def test_l3_recovery_uses_return_plus_geometry_not_return_alone(tmp_path):
@@ -74,15 +110,7 @@ def test_l3_recovery_uses_return_plus_geometry_not_return_alone(tmp_path):
         cloud,
         _PTD(),
         _inspection(SourceType.L3_LIDAR),
-        params=L3RecoveryParams(
-            sample_target=100,
-            voxel_size=0.50,
-            max_plane_distance=0.25,
-            min_points_per_voxel=2,
-            min_seed_fraction=0.05,
-            min_geometry_score=0.30,
-            strong_geometry_score=0.60,
-        ),
+        params=_params(),
     )
 
     assert model is not None
@@ -94,7 +122,43 @@ def test_l3_recovery_uses_return_plus_geometry_not_return_alone(tmp_path):
         np.asarray(cloud.las.z),
     )
 
-    assert mask.tolist() == [True, True, True, False]
+    assert mask.tolist() == [
+        True,
+        True,
+        True,
+        False,
+    ]
+
+
+def test_l3_recovery_does_not_use_input_classification(tmp_path):
+    cloud_a = _cloud(
+        tmp_path / "a.las",
+        classifications=[2, 2, 2, 2],
+    )
+    cloud_b = _cloud(
+        tmp_path / "b.las",
+        classifications=[1, 7, 0, 5],
+    )
+
+    model_a = build_l3_recovery(
+        cloud_a,
+        _PTD(),
+        _inspection(SourceType.L3_LIDAR),
+        params=_params(),
+    )
+    model_b = build_l3_recovery(
+        cloud_b,
+        _PTD(),
+        _inspection(SourceType.L3_LIDAR),
+        params=_params(),
+    )
+
+    assert model_a is not None
+    assert model_b is not None
+    assert np.array_equal(
+        model_a.approved_keys,
+        model_b.approved_keys,
+    )
 
 
 def test_l3_recovery_is_disabled_for_p1(tmp_path):

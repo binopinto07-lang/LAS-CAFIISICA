@@ -495,7 +495,11 @@ class MainWindow(QMainWindow):
             ("Synthetic ground", "synthetic_fill_point_count"),
             ("Terrain 3D voxels", "terrain3d_voxel_count"),
             ("Terrain 3D seed voxels", "terrain3d_seed_voxel_count"),
-            ("L3 recovered measured points", "l3_recovered_count"),
+            ("PTD Ground votes", "ptd_vote_count"),
+            ("SMRF Ground votes", "smrf_vote_count"),
+            ("CSF Ground votes", "csf_vote_count"),
+            ("Consensus 2/3", "consensus_2of3_count"),
+            ("L3 return-supported points", "l3_recovered_count"),
             ("L3 recovery voxels", "l3_recovery_voxel_count"),
         ):
             if hasattr(result, attr):
