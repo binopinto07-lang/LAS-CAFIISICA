@@ -225,9 +225,15 @@ def _write_classified_viewer_laz(
                 fill_written = 0
                 iterator = getattr(
                     model,
-                    "iter_synthetic_fill_xyz",
+                    "iter_viewer_synthetic_fill_xyz",
                     None,
                 )
+                if iterator is None:
+                    iterator = getattr(
+                        model,
+                        "iter_synthetic_fill_xyz",
+                        None,
+                    )
                 if iterator is not None:
                     for x, y, z in iterator():
                         synthetic = _synthetic_record(

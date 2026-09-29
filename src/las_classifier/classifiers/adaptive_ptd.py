@@ -179,18 +179,28 @@ def _adaptive_settings(
     if params.synthetic_spacing > 0:
         synthetic_spacing = params.synthetic_spacing
     else:
-        # Match reconstruction density to the selected quality. The previous
-        # fixed ~2.5x point spacing looked closed in the downsampled Potree
-        # preview but sparse/open beside the full-resolution exported cloud.
+        # Reconstruction density follows the *native* XY density instead of
+        # the thinned PTD sample spacing. This makes the exported Ground Only
+        # cloud physically fill supported gaps at a density comparable with
+        # the source cloud rather than only looking closed in Potree.
+        density_spacing = (
+            float(np.sqrt(1.0 / analysis.xy_density))
+            if analysis.xy_density > 0
+            else spacing
+        )
+        native_spacing = max(
+            0.02,
+            min(spacing, density_spacing),
+        )
         spacing_factor = {
             "fast": 2.5,
             "balanced": 2.0,
             "high": 1.5,
-            "extreme": 1.25,
+            "extreme": 1.0,
         }.get(params.quality, 2.0)
         synthetic_spacing = max(
-            0.05,
-            min(0.30, spacing * spacing_factor),
+            0.025,
+            min(0.30, native_spacing * spacing_factor),
         )
     return (
         seed_resolution,
@@ -285,11 +295,14 @@ class AdaptivePTDModel:
         # bridge a large unknown gap or extrapolate outside the terrain.
         near_ground = (
             valid
-            & np.isfinite(metrics["vertical_residual"])
-            & (np.abs(metrics["vertical_residual"]) <= 0.10)
+            & np.isfinite(metrics["plane_distance"])
             & (metrics["plane_distance"] <= 0.10)
             & (metrics["max_edge"] <= self.max_triangle_edge)
+            & (discontinuity <= 0.35)
         )
+        # Use true 3-D point-to-plane distance, not vertical Z difference.
+        # On steep taludes a genuine terrain point can be >10 cm vertically
+        # from the local plane while still being <10 cm normal to the face.
         confidence[near_ground] = np.maximum(
             confidence[near_ground],
             0.98,
@@ -366,6 +379,16 @@ class AdaptivePTDModel:
             self.tin,
             self.gaps.supported_mask,
             self.effective_fill_spacing,
+        )
+
+    def iter_viewer_synthetic_fill_xyz(self):
+        # Potree preview stays bounded. The Ground Only export uses the full
+        # reconstruction density through iter_synthetic_fill_xyz().
+        yield from iter_triangle_fill(
+            self.tin,
+            self.gaps.supported_mask,
+            self.effective_fill_spacing,
+            max_points=12_000_000,
         )
 
 
