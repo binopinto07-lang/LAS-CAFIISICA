@@ -73,13 +73,14 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "L3 Ground Evidence R18",
                 "Hybrid",
                 "Adaptive PTD",
                 "CSF",
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Hybrid")
+        self.engine_combo.setCurrentText("L3 Ground Evidence R18")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -501,6 +502,13 @@ class MainWindow(QMainWindow):
             ("Consensus 2/3", "consensus_2of3_count"),
             ("L3 return-supported points", "l3_recovered_count"),
             ("L3 recovery voxels", "l3_recovery_voxel_count"),
+            ("High-confidence Ground", "high_confidence_ground"),
+            ("Medium-confidence Ground", "medium_confidence_ground"),
+            ("Recovered from original non-Ground", "recovered_from_non_ground_input"),
+            ("Original class 2 accepted", "original_class2_accepted"),
+            ("Original class 2 rejected", "original_class2_rejected"),
+            ("L3 support voxels", "l3_support_voxels"),
+            ("Cloth sampled last/only returns", "cloth_sampled_returns"),
         ):
             if hasattr(result, attr):
                 lines.append(f"{label}: {getattr(result, attr):,}")
