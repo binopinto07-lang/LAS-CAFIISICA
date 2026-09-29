@@ -20,10 +20,12 @@ from .paths import cache_root, converter_executable
 
 LOGGER = logging.getLogger("las_cafiisica.viewer.converter")
 ProgressCallback = Callable[[int, str], None]
-SOURCE_CACHE_REVISION = 1
-CLASSIFIED_VIEWER_CACHE_REVISION = 3
+SOURCE_CACHE_REVISION = 2
+CLASSIFIED_VIEWER_CACHE_REVISION = 4
+VIEWER_MAX_ORIGINAL_POINTS = 25_000_000
 VIEWER_MAX_GROUND_POINTS = 14_000_000
 VIEWER_MAX_NON_GROUND_POINTS = 5_000_000
+VIEWER_SAFE_SCALE = 0.001
 GROUND_CLASS = np.uint8(2)
 NON_GROUND_CLASS = np.uint8(1)
 
@@ -84,6 +86,232 @@ def _stride_for(count: int, cap: int) -> int:
     if count <= 0 or cap <= 0:
         return 1
     return max(1, int(ceil(count / cap)))
+
+
+def _safe_viewer_header(source_header: laspy.LasHeader) -> laspy.LasHeader:
+    """Return a normalized header that PotreeConverter 2.1 handles reliably."""
+
+    header = laspy.LasHeader(
+        point_format=3,
+        version="1.2",
+    )
+    mins = np.asarray(
+        source_header.mins,
+        dtype=np.float64,
+    )
+    header.scales = np.full(
+        3,
+        VIEWER_SAFE_SCALE,
+        dtype=np.float64,
+    )
+    header.offsets = (
+        np.floor(mins / 1000.0) * 1000.0
+    ).astype(np.float64)
+
+    try:
+        crs = source_header.parse_crs()
+        if crs is not None:
+            header.add_crs(crs)
+    except Exception:
+        LOGGER.warning(
+            "VIEWER_CRS_COPY_FAILED",
+            exc_info=True,
+        )
+
+    return header
+
+
+def _copy_standard_viewer_points(
+    source_points,
+    header: laspy.LasHeader,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    *,
+    classifications: np.ndarray | None = None,
+) -> laspy.ScaleAwarePointRecord:
+    target = laspy.ScaleAwarePointRecord.zeros(
+        len(x),
+        header=header,
+    )
+    target.x = np.asarray(x, dtype=np.float64)
+    target.y = np.asarray(y, dtype=np.float64)
+    target.z = np.asarray(z, dtype=np.float64)
+
+    source_names = set(
+        source_points.point_format.dimension_names
+    )
+    target_names = set(
+        target.point_format.dimension_names
+    )
+    for name in (
+        "intensity",
+        "return_number",
+        "number_of_returns",
+        "scan_direction_flag",
+        "edge_of_flight_line",
+        "synthetic",
+        "key_point",
+        "withheld",
+        "scan_angle_rank",
+        "user_data",
+        "point_source_id",
+        "gps_time",
+        "red",
+        "green",
+        "blue",
+    ):
+        if name in source_names and name in target_names:
+            try:
+                target[name] = np.asarray(
+                    source_points[name]
+                )
+            except Exception:
+                LOGGER.debug(
+                    "VIEWER_DIMENSION_COPY_SKIPPED name=%s",
+                    name,
+                    exc_info=True,
+                )
+
+    if classifications is not None:
+        target.classification = np.asarray(
+            classifications,
+            dtype=np.uint8,
+        )
+    elif "classification" in source_names:
+        target.classification = np.asarray(
+            source_points.classification,
+            dtype=np.uint8,
+        )
+
+    return target
+
+
+def _write_original_viewer_laz(
+    source: Path,
+    output: Path,
+    progress: ProgressCallback | None = None,
+    *,
+    max_points: int = VIEWER_MAX_ORIGINAL_POINTS,
+) -> Path:
+    """Write a bounded, 1 mm normalized original preview cloud.
+
+    PotreeConverter 2.1 exit code 123 is triggered by strict bounding-box
+    validation on some LAS files with high-precision scales/bounds. Rewriting
+    only the viewer cache avoids modifying the user's source LAS.
+    """
+
+    output.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    partial = output.with_name(
+        output.name + ".partial"
+    )
+    if partial.exists():
+        partial.unlink()
+
+    with laspy.open(source) as reader:
+        total = int(reader.header.point_count)
+        stride = _stride_for(
+            total,
+            max_points,
+        )
+        header = _safe_viewer_header(
+            reader.header
+        )
+        processed = 0
+        written = 0
+        ordinal = 0
+
+        try:
+            with laspy.open(
+                partial,
+                mode="w",
+                header=header,
+                do_compress=True,
+            ) as writer:
+                for points in reader.chunk_iterator(
+                    2_000_000
+                ):
+                    count = len(points)
+                    local = np.arange(
+                        count,
+                        dtype=np.int64,
+                    )
+                    keep = local[
+                        (
+                            (ordinal + local)
+                            % stride
+                        )
+                        == 0
+                    ]
+                    ordinal += count
+
+                    if keep.size:
+                        selected = points[keep]
+                        x = _scaled(
+                            selected.X,
+                            reader.header.scales[0],
+                            reader.header.offsets[0],
+                        )
+                        y = _scaled(
+                            selected.Y,
+                            reader.header.scales[1],
+                            reader.header.offsets[1],
+                        )
+                        z = _scaled(
+                            selected.Z,
+                            reader.header.scales[2],
+                            reader.header.offsets[2],
+                        )
+                        normalized = (
+                            _copy_standard_viewer_points(
+                                selected,
+                                header,
+                                x,
+                                y,
+                                z,
+                            )
+                        )
+                        writer.write_points(
+                            normalized
+                        )
+                        written += len(
+                            normalized
+                        )
+
+                    processed += count
+                    if total:
+                        _emit(
+                            progress,
+                            int(
+                                60
+                                * processed
+                                / total
+                            ),
+                            (
+                                "Preparing original viewer: "
+                                f"{processed:,}/{total:,}"
+                            ),
+                        )
+
+            partial.replace(output)
+        except Exception:
+            if partial.exists():
+                partial.unlink()
+            raise
+
+    LOGGER.info(
+        "ORIGINAL_VIEWER_NORMALIZED source=%s output=%s "
+        "points=%d stride=%d scale=%.6f",
+        source,
+        output,
+        written,
+        stride,
+        VIEWER_SAFE_SCALE,
+    )
+    return output
 
 
 def _sample_class_indices(
@@ -147,9 +375,12 @@ def _write_classified_viewer_laz(
     )
 
     with laspy.open(source) as reader:
-        header = reader.header.copy()
-        scales = header.scales
-        offsets = header.offsets
+        source_header = reader.header
+        header = _safe_viewer_header(
+            source_header
+        )
+        scales = source_header.scales
+        offsets = source_header.offsets
         total = int(reader.header.point_count)
         chunk_size = int(getattr(model.params, "chunk_size", 2_000_000))
 
@@ -205,7 +436,16 @@ def _write_classified_viewer_laz(
                         )
 
                     if keep.size:
-                        writer.write_points(points[keep])
+                        selected = points[keep]
+                        measured = _copy_standard_viewer_points(
+                            selected,
+                            header,
+                            x[keep],
+                            y[keep],
+                            z[keep],
+                            classifications=classes[keep],
+                        )
+                        writer.write_points(measured)
                         measured_written += int(keep.size)
 
                     processed += len(points)
@@ -359,7 +599,39 @@ def prepare_original(
         return dataset
 
     root.mkdir(parents=True, exist_ok=True)
-    _run_converter(source_path, dataset, progress)
+    viewer_laz = root / "original_viewer.laz"
+
+    def sample_progress(
+        percent: int,
+        message: str,
+    ) -> None:
+        _emit(
+            progress,
+            int(percent * 0.65),
+            message,
+        )
+
+    _write_original_viewer_laz(
+        source_path,
+        viewer_laz,
+        sample_progress,
+    )
+
+    def converter_progress(
+        percent: int,
+        message: str,
+    ) -> None:
+        _emit(
+            progress,
+            65 + int(percent * 0.35),
+            message,
+        )
+
+    _run_converter(
+        viewer_laz,
+        dataset,
+        converter_progress,
+    )
     return dataset
 
 
