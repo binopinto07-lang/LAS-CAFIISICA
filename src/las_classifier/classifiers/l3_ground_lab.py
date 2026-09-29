@@ -1,0 +1,1030 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, replace
+from time import perf_counter
+from typing import Callable
+
+import numpy as np
+
+from ..cloud.model import CloudModel
+from ..ground.local_geometry import normal_alignment, point_normals
+from ..ground.types import GroundEngineParams
+from ..terrain.ground_evidence import (
+    GroundDecision,
+    GroundEvidence,
+    GroundEvidenceConfig,
+    GroundEvidenceScorer,
+)
+from ..terrain.l3_context import (
+    CoarseDetrendModel,
+    L3SpatialContext,
+    build_l3_spatial_context,
+)
+from ..terrain.schema import SourceInspection, SourceType
+from ..terrain.source_inspector import inspect_source
+from .adaptive_ptd import (
+    GROUND_CLASS,
+    AdaptivePTDModel,
+    run_adaptive_ptd,
+)
+from .smrf import SMRFModel, SMRFParams, run_smrf
+
+
+LOGGER = logging.getLogger(
+    "las_cafiisica.classifiers.l3_ground_lab"
+)
+ProgressCallback = Callable[[int, str], None]
+
+
+def _emit(
+    callback: ProgressCallback | None,
+    percent: int,
+    message: str,
+) -> None:
+    if callback is not None:
+        callback(
+            max(0, min(100, int(percent))),
+            message,
+        )
+
+
+def _dimension(
+    points,
+    *names: str,
+    dtype=None,
+) -> np.ndarray | None:
+    if points is None:
+        return None
+    available = set(
+        points.point_format.dimension_names
+    )
+    for name in names:
+        if name in available:
+            values = np.asarray(points[name])
+            if dtype is not None:
+                values = values.astype(
+                    dtype,
+                    copy=False,
+                )
+            return values
+    return None
+
+
+def _l3_smrf_params(
+    params: GroundEngineParams,
+) -> SMRFParams:
+    # SMRF remains auxiliary evidence/debug in R18. It is NOT a vote.
+    return SMRFParams(
+        cell=0.50,
+        slope=0.20,
+        window=14.0,
+        threshold=0.32,
+        scalar=1.20,
+        fill_spacing=0.25,
+        chunk_size=params.chunk_size,
+        terrain3d_enabled=False,
+    )
+
+
+def _slope_difference(
+    point_normal: np.ndarray | None,
+    terrain_normal: np.ndarray,
+) -> np.ndarray | None:
+    if point_normal is None:
+        return None
+    point_normal = np.asarray(
+        point_normal,
+        dtype=np.float64,
+    )
+    terrain_normal = np.asarray(
+        terrain_normal,
+        dtype=np.float64,
+    )
+    valid = (
+        np.all(
+            np.isfinite(point_normal),
+            axis=1,
+        )
+        & np.all(
+            np.isfinite(terrain_normal),
+            axis=1,
+        )
+    )
+    result = np.full(
+        point_normal.shape[0],
+        np.nan,
+        dtype=np.float64,
+    )
+    if not np.any(valid):
+        return result
+
+    pn = point_normal[valid]
+    tn = terrain_normal[valid]
+    point_slope = np.degrees(
+        np.arctan2(
+            np.linalg.norm(
+                pn[:, :2],
+                axis=1,
+            ),
+            np.maximum(
+                np.abs(pn[:, 2]),
+                1e-9,
+            ),
+        )
+    )
+    terrain_slope = np.degrees(
+        np.arctan2(
+            np.linalg.norm(
+                tn[:, :2],
+                axis=1,
+            ),
+            np.maximum(
+                np.abs(tn[:, 2]),
+                1e-9,
+            ),
+        )
+    )
+    result[valid] = np.abs(
+        point_slope - terrain_slope
+    )
+    return result
+
+
+@dataclass(slots=True)
+class L3GroundLabModel:
+    params: GroundEngineParams
+    ptd: AdaptivePTDModel
+    smrf: SMRFModel
+    context: L3SpatialContext
+    coarse_detrend: CoarseDetrendModel | None
+    scorer: GroundEvidenceScorer
+    source_inspection: SourceInspection
+    engine_name: str = "L3 Ground Lab"
+
+    @property
+    def synthetic_fill_point_count(
+        self,
+    ) -> int:
+        return 0
+
+    @property
+    def effective_fill_spacing(
+        self,
+    ) -> float:
+        return 0.0
+
+    def _evaluate(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> GroundEvidence:
+        ptd_score, metrics = (
+            self.ptd._confidence(
+                x,
+                y,
+                z,
+                points=points,
+            )
+        )
+
+        if self.coarse_detrend is not None:
+            detrended = (
+                self.coarse_detrend.residual_xyz(
+                    x,
+                    y,
+                    z,
+                )
+            )
+        else:
+            detrended = np.asarray(
+                metrics["vertical_residual"],
+                dtype=np.float64,
+            )
+
+        (
+            neighbour,
+            spread,
+            roughness,
+        ) = self.context.query(
+            x,
+            y,
+        )
+
+        normals = (
+            point_normals(points)
+            if points is not None
+            else None
+        )
+        alignment = normal_alignment(
+            normals,
+            metrics["normal"],
+        )
+        slope_difference = (
+            _slope_difference(
+                normals,
+                metrics["normal"],
+            )
+        )
+
+        smrf_ground = (
+            self.smrf.classify_xyz(
+                x,
+                y,
+                z,
+            )
+            == GROUND_CLASS
+        )
+
+        original_class = _dimension(
+            points,
+            "classification",
+            dtype=np.uint8,
+        )
+        return_number = _dimension(
+            points,
+            "return_number",
+            dtype=np.uint8,
+        )
+        number_of_returns = _dimension(
+            points,
+            "number_of_returns",
+            dtype=np.uint8,
+        )
+        intensity = _dimension(
+            points,
+            "intensity",
+        )
+        scan_angle = _dimension(
+            points,
+            "scan_angle",
+            "scan_angle_rank",
+        )
+        gps_time = _dimension(
+            points,
+            "gps_time",
+        )
+        point_source_id = _dimension(
+            points,
+            "point_source_id",
+        )
+        withheld = _dimension(
+            points,
+            "withheld",
+        )
+        synthetic = _dimension(
+            points,
+            "synthetic",
+        )
+
+        invalid = (
+            ~np.isfinite(x)
+            | ~np.isfinite(y)
+            | ~np.isfinite(z)
+        )
+        if withheld is not None:
+            invalid |= np.asarray(
+                withheld,
+                dtype=np.bool_,
+            )
+        # R18 L3 is measured-ground only. Existing source synthetic points
+        # cannot bootstrap measured Ground.
+        if synthetic is not None:
+            invalid |= np.asarray(
+                synthetic,
+                dtype=np.bool_,
+            )
+
+        if (
+            self.context.intensity_profile
+            is not None
+        ):
+            intensity_score = (
+                self.context.intensity_profile.score(
+                    intensity,
+                    x.shape[0],
+                )
+            )
+        else:
+            intensity_score = np.full(
+                x.shape[0],
+                0.50,
+                dtype=np.float64,
+            )
+
+        return self.scorer.evaluate(
+            ptd_score=ptd_score,
+            tin_residual=(
+                metrics["plane_distance"]
+            ),
+            vertical_residual=(
+                metrics["vertical_residual"]
+            ),
+            detrended_residual=detrended,
+            neighbour_support=neighbour,
+            vertical_spread=spread,
+            roughness=roughness,
+            original_class=original_class,
+            return_number=return_number,
+            number_of_returns=number_of_returns,
+            intensity=intensity,
+            intensity_score=intensity_score,
+            normal_alignment=alignment,
+            slope_difference=slope_difference,
+            smrf_evidence=smrf_ground,
+            cloth_evidence=None,
+            scan_angle=scan_angle,
+            gps_time=gps_time,
+            point_source_id=point_source_id,
+            invalid_mask=invalid,
+            source_noise_mask=None,
+        )
+
+    def evaluate_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> GroundEvidence:
+        return self._evaluate(
+            points,
+            x,
+            y,
+            z,
+        )
+
+    def classify_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        return self._evaluate(
+            points,
+            x,
+            y,
+            z,
+        ).classifications()
+
+    def classify_xyz(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        return self._evaluate(
+            None,
+            x,
+            y,
+            z,
+        ).classifications()
+
+    def confidence_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        return self._evaluate(
+            points,
+            x,
+            y,
+            z,
+        ).score
+
+    def confidence_xyz(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        return self._evaluate(
+            None,
+            x,
+            y,
+            z,
+        ).score
+
+    def iter_synthetic_fill_xyz(self):
+        if False:
+            yield None
+
+    def iter_viewer_synthetic_fill_xyz(self):
+        if False:
+            yield None
+
+
+@dataclass(frozen=True, slots=True)
+class L3GroundLabResult:
+    model: L3GroundLabModel
+    ground_count: int
+    non_ground_count: int
+    elapsed_seconds: float
+    analysis: object
+    seed_count: int
+    candidate_count: int
+    ptd_iterations: int
+    detected_gap_count: int
+    supported_gap_count: int
+    occluded_gap_count: int
+    rejected_gap_count: int
+    synthetic_fill_point_count: int
+    mean_confidence: float
+    original_validated_count: int
+    recovered_high_count: int
+    recovered_medium_count: int
+    rejected_class2_count: int
+    non_ground_vegetation_count: int
+    non_ground_object_count: int
+    unknown_count: int
+    noise_count: int
+    return_only_count: int
+    return_last_multi_count: int
+    return_first_multi_count: int
+    return_intermediate_count: int
+    return_invalid_count: int
+    context_cell_count: int
+    coarse_representative_count: int
+    source_type: str
+    source_confidence: float
+    engine_name: str = "L3 Ground Lab"
+    ground_only: bool = True
+
+    @property
+    def point_count(self) -> int:
+        return (
+            self.ground_count
+            + self.non_ground_count
+        )
+
+    @property
+    def l3_recovered_count(
+        self,
+    ) -> int:
+        return (
+            self.recovered_high_count
+            + self.recovered_medium_count
+        )
+
+    @property
+    def l3_recovery_voxel_count(
+        self,
+    ) -> int:
+        return self.context_cell_count
+
+
+def _return_counts(
+    points,
+) -> tuple[
+    int,
+    int,
+    int,
+    int,
+    int,
+]:
+    rn = _dimension(
+        points,
+        "return_number",
+        dtype=np.int16,
+    )
+    nr = _dimension(
+        points,
+        "number_of_returns",
+        dtype=np.int16,
+    )
+    if rn is None or nr is None:
+        return (
+            0,
+            0,
+            0,
+            0,
+            len(points),
+        )
+    valid = (
+        (rn > 0)
+        & (nr > 0)
+        & (rn <= nr)
+    )
+    only = (
+        valid
+        & (rn == 1)
+        & (nr == 1)
+    )
+    last_multi = (
+        valid
+        & (nr > 1)
+        & (rn == nr)
+    )
+    first_multi = (
+        valid
+        & (nr > 1)
+        & (rn == 1)
+    )
+    intermediate = (
+        valid
+        & (rn > 1)
+        & (rn < nr)
+    )
+    invalid = ~valid
+    return tuple(
+        int(
+            np.count_nonzero(mask)
+        )
+        for mask in (
+            only,
+            last_multi,
+            first_multi,
+            intermediate,
+            invalid,
+        )
+    )
+
+
+def run_l3_ground_lab(
+    cloud: CloudModel,
+    params: GroundEngineParams | None = None,
+    progress: ProgressCallback | None = None,
+    source_override: SourceType | str | None = None,
+) -> L3GroundLabResult:
+    started = perf_counter()
+    requested = (
+        params
+        or GroundEngineParams()
+    )
+    # Keep the second evidence pass bounded on 100M+/300M+ clouds.
+    params = replace(
+        requested,
+        chunk_size=min(
+            int(requested.chunk_size),
+            750_000,
+        ),
+        synthetic_spacing=0.0,
+    )
+
+    LOGGER.info(
+        "GROUND_ENGINE_START"
+    )
+    LOGGER.info(
+        "GROUND_ENGINE=L3_GROUND_EVIDENCE_R18"
+    )
+    LOGGER.info(
+        "R18_SYNTHETIC_POLICY=DISABLED"
+    )
+
+    inspection = inspect_source(
+        cloud,
+        override=source_override,
+    )
+    if (
+        inspection.source_type
+        is not SourceType.L3_LIDAR
+    ):
+        raise RuntimeError(
+            "R18 L3 Ground Lab aceita apenas "
+            "nuvens L3/LiDAR nesta fase. "
+            "Source Inspector: "
+            f"{inspection.source_type.value}."
+        )
+
+    def ptd_progress(
+        percent: int,
+        message: str,
+    ) -> None:
+        _emit(
+            progress,
+            int(percent * 0.38),
+            message,
+        )
+
+    # Stable R17 PTD remains the geometric nucleus. R18 changes the final
+    # per-point decision, not the proven TIN/Qhull machinery.
+    ptd_result = run_adaptive_ptd(
+        cloud,
+        params,
+        ptd_progress,
+        count_full=False,
+    )
+
+    _emit(
+        progress,
+        39,
+        "L3 Ground Lab: coarse detrending",
+    )
+    coarse = CoarseDetrendModel.build(
+        ptd_result.model.tin.vertices,
+        spacing=(
+            ptd_result.analysis.median_spacing
+        ),
+    )
+
+    def smrf_progress(
+        percent: int,
+        message: str,
+    ) -> None:
+        _emit(
+            progress,
+            40 + int(
+                percent * 0.06
+            ),
+            (
+                "SMRF evidence: "
+                f"{message}"
+            ),
+        )
+
+    smrf_result = run_smrf(
+        cloud,
+        _l3_smrf_params(params),
+        smrf_progress,
+        count_full=False,
+    )
+
+    context = build_l3_spatial_context(
+        cloud,
+        ptd_result.model,
+        sample_target=min(
+            1_500_000,
+            max(
+                250_000,
+                params.sample_target,
+            ),
+        ),
+        progress=progress,
+    )
+
+    spacing = max(
+        float(
+            ptd_result.analysis.median_spacing
+        ),
+        0.005,
+    )
+    evidence_config = GroundEvidenceConfig(
+        surface_scale=max(
+            0.18,
+            min(
+                0.38,
+                (
+                    ptd_result.model.distance_limit
+                    * 1.20
+                ),
+            ),
+        ),
+        detrend_scale=max(
+            0.35,
+            min(
+                1.25,
+                spacing * 12.0,
+            ),
+        ),
+        vertical_spread_limit=max(
+            0.65,
+            min(
+                1.60,
+                spacing * 18.0,
+            ),
+        ),
+        roughness_scale=max(
+            0.12,
+            min(
+                0.35,
+                spacing * 5.0,
+            ),
+        ),
+    )
+    model = L3GroundLabModel(
+        params=params,
+        ptd=ptd_result.model,
+        smrf=smrf_result.model,
+        context=context,
+        coarse_detrend=coarse,
+        scorer=GroundEvidenceScorer(
+            evidence_config
+        ),
+        source_inspection=inspection,
+    )
+
+    totals = {
+        GroundDecision.L3_GROUND_ORIGINAL_VALIDATED: 0,
+        GroundDecision.L3_GROUND_RECOVERED_HIGH: 0,
+        GroundDecision.L3_GROUND_RECOVERED_MEDIUM: 0,
+        GroundDecision.NON_GROUND_VEGETATION: 0,
+        GroundDecision.NON_GROUND_OBJECT: 0,
+        GroundDecision.NOISE: 0,
+        GroundDecision.UNKNOWN: 0,
+    }
+    class2_input = 0
+    confidence_sum = 0.0
+    confidence_n = 0
+    return_only = 0
+    return_last_multi = 0
+    return_first_multi = 0
+    return_intermediate = 0
+    return_invalid = 0
+
+    scales = cloud.las.header.scales
+    offsets = cloud.las.header.offsets
+    total = cloud.point_count
+    _emit(
+        progress,
+        58,
+        (
+            "L3 second pass: scoring "
+            "every measured return"
+        ),
+    )
+
+    for start in range(
+        0,
+        total,
+        params.chunk_size,
+    ):
+        stop = min(
+            start + params.chunk_size,
+            total,
+        )
+        points = cloud.las.points[
+            start:stop
+        ]
+        x = (
+            np.asarray(
+                points.X,
+                dtype=np.float64,
+            )
+            * scales[0]
+            + offsets[0]
+        )
+        y = (
+            np.asarray(
+                points.Y,
+                dtype=np.float64,
+            )
+            * scales[1]
+            + offsets[1]
+        )
+        z = (
+            np.asarray(
+                points.Z,
+                dtype=np.float64,
+            )
+            * scales[2]
+            + offsets[2]
+        )
+
+        evidence = model.evaluate_points(
+            points,
+            x,
+            y,
+            z,
+        )
+        for decision in totals:
+            totals[decision] += int(
+                np.count_nonzero(
+                    evidence.decision
+                    == int(decision)
+                )
+            )
+
+        original_class = (
+            evidence.original_class
+        )
+        if original_class is not None:
+            class2_input += int(
+                np.count_nonzero(
+                    original_class == 2
+                )
+            )
+
+        confidence_sum += float(
+            np.sum(
+                evidence.score,
+                dtype=np.float64,
+            )
+        )
+        confidence_n += int(
+            evidence.score.size
+        )
+
+        (
+            only,
+            last_multi,
+            first_multi,
+            intermediate,
+            invalid,
+        ) = _return_counts(points)
+        return_only += only
+        return_last_multi += last_multi
+        return_first_multi += first_multi
+        return_intermediate += intermediate
+        return_invalid += invalid
+
+        _emit(
+            progress,
+            58
+            + int(
+                41
+                * stop
+                / max(1, total)
+            ),
+            (
+                "L3 GroundScore "
+                f"{stop:,}/{total:,}"
+            ),
+        )
+
+    original_validated = totals[
+        GroundDecision.L3_GROUND_ORIGINAL_VALIDATED
+    ]
+    recovered_high = totals[
+        GroundDecision.L3_GROUND_RECOVERED_HIGH
+    ]
+    recovered_medium = totals[
+        GroundDecision.L3_GROUND_RECOVERED_MEDIUM
+    ]
+    ground_count = (
+        original_validated
+        + recovered_high
+        + recovered_medium
+    )
+    non_ground_count = (
+        total - ground_count
+    )
+    mean_confidence = (
+        confidence_sum
+        / confidence_n
+        if confidence_n
+        else 0.0
+    )
+    elapsed = (
+        perf_counter() - started
+    )
+
+    LOGGER.info(
+        "L3_GROUND_EVIDENCE "
+        "original_validated=%d "
+        "recovered_high=%d "
+        "recovered_medium=%d "
+        "rejected_class2=%d",
+        original_validated,
+        recovered_high,
+        recovered_medium,
+        max(
+            0,
+            class2_input
+            - original_validated,
+        ),
+    )
+    LOGGER.info(
+        "L3_REJECTED vegetation=%d "
+        "object=%d unknown=%d noise=%d",
+        totals[
+            GroundDecision.NON_GROUND_VEGETATION
+        ],
+        totals[
+            GroundDecision.NON_GROUND_OBJECT
+        ],
+        totals[
+            GroundDecision.UNKNOWN
+        ],
+        totals[
+            GroundDecision.NOISE
+        ],
+    )
+    LOGGER.info(
+        "L3_RETURNS only=%d "
+        "last_multi=%d first_multi=%d "
+        "intermediate=%d invalid=%d",
+        return_only,
+        return_last_multi,
+        return_first_multi,
+        return_intermediate,
+        return_invalid,
+    )
+    LOGGER.info(
+        "L3_CONTEXT cells=%d "
+        "coarse_representatives=%d",
+        context.keys.size,
+        (
+            coarse.representative_count
+            if coarse is not None
+            else 0
+        ),
+    )
+    LOGGER.info(
+        "SYNTHETIC_POINTS=0"
+    )
+    LOGGER.info(
+        "GROUND_CONFIDENCE_MEAN=%.4f",
+        mean_confidence,
+    )
+    LOGGER.info(
+        "PROCESSING_TIME=%.3f",
+        elapsed,
+    )
+
+    _emit(
+        progress,
+        100,
+        "R18 L3 Ground Evidence complete",
+    )
+    return L3GroundLabResult(
+        model=model,
+        ground_count=ground_count,
+        non_ground_count=(
+            non_ground_count
+        ),
+        elapsed_seconds=elapsed,
+        analysis=ptd_result.analysis,
+        seed_count=(
+            ptd_result.seed_count
+        ),
+        candidate_count=(
+            ptd_result.candidate_count
+        ),
+        ptd_iterations=(
+            ptd_result.ptd_iterations
+        ),
+        detected_gap_count=(
+            ptd_result.detected_gap_count
+        ),
+        supported_gap_count=(
+            ptd_result.supported_gap_count
+        ),
+        occluded_gap_count=(
+            ptd_result.occluded_gap_count
+        ),
+        rejected_gap_count=(
+            ptd_result.rejected_gap_count
+        ),
+        synthetic_fill_point_count=0,
+        mean_confidence=(
+            mean_confidence
+        ),
+        original_validated_count=(
+            original_validated
+        ),
+        recovered_high_count=(
+            recovered_high
+        ),
+        recovered_medium_count=(
+            recovered_medium
+        ),
+        rejected_class2_count=max(
+            0,
+            class2_input
+            - original_validated,
+        ),
+        non_ground_vegetation_count=(
+            totals[
+                GroundDecision.NON_GROUND_VEGETATION
+            ]
+        ),
+        non_ground_object_count=(
+            totals[
+                GroundDecision.NON_GROUND_OBJECT
+            ]
+        ),
+        unknown_count=(
+            totals[
+                GroundDecision.UNKNOWN
+            ]
+        ),
+        noise_count=(
+            totals[
+                GroundDecision.NOISE
+            ]
+        ),
+        return_only_count=(
+            return_only
+        ),
+        return_last_multi_count=(
+            return_last_multi
+        ),
+        return_first_multi_count=(
+            return_first_multi
+        ),
+        return_intermediate_count=(
+            return_intermediate
+        ),
+        return_invalid_count=(
+            return_invalid
+        ),
+        context_cell_count=int(
+            context.keys.size
+        ),
+        coarse_representative_count=(
+            coarse.representative_count
+            if coarse is not None
+            else 0
+        ),
+        source_type=(
+            inspection.source_type.value
+        ),
+        source_confidence=(
+            inspection.confidence
+        ),
+    )

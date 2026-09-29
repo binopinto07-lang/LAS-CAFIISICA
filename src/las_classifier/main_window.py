@@ -73,13 +73,14 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "L3 Ground Lab",
                 "Hybrid",
                 "Adaptive PTD",
                 "CSF",
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Hybrid")
+        self.engine_combo.setCurrentText("L3 Ground Lab")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -124,6 +125,12 @@ class MainWindow(QMainWindow):
             "Include reconstructed ground"
         )
         self.include_synthetic.setChecked(True)
+        self.engine_combo.currentTextChanged.connect(
+            self._engine_changed
+        )
+        self._engine_changed(
+            self.engine_combo.currentText()
+        )
 
         form.addRow("Engine", self.engine_combo)
         form.addRow("Ground quality", self.quality_combo)
@@ -418,6 +425,21 @@ class MainWindow(QMainWindow):
             )
         return params
 
+    def _engine_changed(
+        self,
+        engine: str,
+    ) -> None:
+        l3_lab = engine == "L3 Ground Lab"
+        if l3_lab:
+            self.include_synthetic.setChecked(False)
+            self.fill_spacing_spin.setValue(0.0)
+        self.include_synthetic.setEnabled(
+            not l3_lab
+        )
+        self.fill_spacing_spin.setEnabled(
+            not l3_lab
+        )
+
     def _source_override(self) -> str | None:
         text = self.source_combo.currentText()
         if text == "DJI Zenmuse L3 / LiDAR":
@@ -495,6 +517,21 @@ class MainWindow(QMainWindow):
             ("Synthetic ground", "synthetic_fill_point_count"),
             ("Terrain 3D voxels", "terrain3d_voxel_count"),
             ("Terrain 3D seed voxels", "terrain3d_seed_voxel_count"),
+            ("R18 class2 validated", "original_validated_count"),
+            ("R18 recovered high", "recovered_high_count"),
+            ("R18 recovered medium", "recovered_medium_count"),
+            ("R18 rejected source class2", "rejected_class2_count"),
+            ("R18 vegetation", "non_ground_vegetation_count"),
+            ("R18 object", "non_ground_object_count"),
+            ("R18 unknown", "unknown_count"),
+            ("R18 noise", "noise_count"),
+            ("R18 return only", "return_only_count"),
+            ("R18 return last multi", "return_last_multi_count"),
+            ("R18 return first multi", "return_first_multi_count"),
+            ("R18 return intermediate", "return_intermediate_count"),
+            ("R18 invalid returns", "return_invalid_count"),
+            ("R18 spatial cells", "context_cell_count"),
+            ("R18 coarse representatives", "coarse_representative_count"),
             ("PTD Ground votes", "ptd_vote_count"),
             ("SMRF Ground votes", "smrf_vote_count"),
             ("CSF Ground votes", "csf_vote_count"),

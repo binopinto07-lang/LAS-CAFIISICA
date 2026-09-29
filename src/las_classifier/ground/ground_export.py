@@ -16,6 +16,8 @@ GROUND_CONFIDENCE = "GroundConfidence"
 GROUND_SOURCE = "GroundSource"
 INTERPOLATION_DISTANCE = "InterpolationDistance"
 GROUND_METHOD = "GroundMethod"
+GROUND_DECISION = "GroundDecision"
+GROUND_PROVENANCE = "GroundProvenance"
 
 
 def _scaled(raw, scale: float, offset: float) -> np.ndarray:
@@ -34,6 +36,8 @@ def _classify_points(model, points, x, y, z) -> np.ndarray:
 
 def _method_code(model) -> int:
     name = str(getattr(model, "engine_name", "")).lower()
+    if "l3 ground lab" in name or "ground evidence" in name:
+        return 5
     if "hybrid" in name:
         return 2
     if "adaptive" in name or "ptd" in name:
@@ -75,6 +79,20 @@ def _with_ground_metadata(header: laspy.LasHeader) -> laspy.LasHeader:
             laspy.ExtraBytesParams(
                 name=GROUND_METHOD,
                 type=np.uint8,
+            )
+        )
+    if GROUND_DECISION not in names:
+        extras.append(
+            laspy.ExtraBytesParams(
+                name=GROUND_DECISION,
+                type=np.uint8,
+            )
+        )
+    if GROUND_PROVENANCE not in names:
+        extras.append(
+            laspy.ExtraBytesParams(
+                name=GROUND_PROVENANCE,
+                type=np.uint16,
             )
         )
     if extras:
@@ -265,23 +283,61 @@ def export_ground_only(
                     x = _scaled(points.X, scales[0], offsets[0])
                     y = _scaled(points.Y, scales[1], offsets[1])
                     z = _scaled(points.Z, scales[2], offsets[2])
-                    classes = _classify_points(
+                    evaluate = getattr(
                         model,
-                        points,
-                        x,
-                        y,
-                        z,
+                        "evaluate_points",
+                        None,
                     )
-                    keep = classes == GROUND_CLASS
-                    if np.any(keep):
-                        confidence = _point_confidence(
+                    evidence = None
+                    ground_sources = None
+                    decision_codes = None
+                    provenance_codes = None
+                    confidence = None
+                    if evaluate is not None:
+                        evidence = evaluate(
+                            points,
+                            x,
+                            y,
+                            z,
+                        )
+                        classes = (
+                            evidence.classifications()
+                        )
+                        confidence = np.asarray(
+                            evidence.score,
+                            dtype=np.float32,
+                        )
+                        ground_sources = (
+                            evidence.ground_source_codes()
+                        )
+                        decision_codes = np.asarray(
+                            evidence.decision,
+                            dtype=np.uint8,
+                        )
+                        provenance_codes = np.asarray(
+                            evidence.provenance,
+                            dtype=np.uint16,
+                        )
+                    else:
+                        classes = _classify_points(
                             model,
                             points,
                             x,
                             y,
                             z,
-                            classes,
                         )
+
+                    keep = classes == GROUND_CLASS
+                    if np.any(keep):
+                        if confidence is None:
+                            confidence = _point_confidence(
+                                model,
+                                points,
+                                x,
+                                y,
+                                z,
+                                classes,
+                            )
                         selected = points[keep]
                         ground_points = _copy_to_output_format(
                             selected,
@@ -301,11 +357,16 @@ def export_ground_only(
                                 confidence[keep]
                             )
                         if GROUND_SOURCE in names:
-                            ground_points[GROUND_SOURCE] = np.full(
-                                kept_count,
-                                1,
-                                dtype=np.uint8,
-                            )
+                            if ground_sources is not None:
+                                ground_points[GROUND_SOURCE] = (
+                                    ground_sources[keep]
+                                )
+                            else:
+                                ground_points[GROUND_SOURCE] = np.full(
+                                    kept_count,
+                                    1,
+                                    dtype=np.uint8,
+                                )
                         if INTERPOLATION_DISTANCE in names:
                             ground_points[
                                 INTERPOLATION_DISTANCE
@@ -318,6 +379,20 @@ def export_ground_only(
                                 kept_count,
                                 _method_code(model),
                                 dtype=np.uint8,
+                            )
+                        if (
+                            GROUND_DECISION in names
+                            and decision_codes is not None
+                        ):
+                            ground_points[GROUND_DECISION] = (
+                                decision_codes[keep]
+                            )
+                        if (
+                            GROUND_PROVENANCE in names
+                            and provenance_codes is not None
+                        ):
+                            ground_points[GROUND_PROVENANCE] = (
+                                provenance_codes[keep]
                             )
                         writer.write_points(ground_points)
                         real_ground += len(ground_points)
