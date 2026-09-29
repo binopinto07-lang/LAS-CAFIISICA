@@ -293,11 +293,23 @@ class AdaptivePTDModel:
         # terrain is ground, even when photogrammetric normals are noisy.
         # We still require a valid, supported TIN facet so this rule cannot
         # bridge a large unknown gap or extrapolate outside the terrain.
+        # Delaunay triangles across a regular cell can contain a diagonal
+        # sqrt(2) times longer than the nominal supported edge. Treat that
+        # diagonal as the same supported local neighbourhood; otherwise steep
+        # but perfectly valid terrain faces are rejected only because of the
+        # triangulation diagonal.
+        near_ground_edge_limit = (
+            self.max_triangle_edge * np.sqrt(2.0)
+            + 1e-9
+        )
         near_ground = (
             valid
             & np.isfinite(metrics["plane_distance"])
             & (metrics["plane_distance"] <= 0.10)
-            & (metrics["max_edge"] <= self.max_triangle_edge)
+            & (
+                metrics["max_edge"]
+                <= near_ground_edge_limit
+            )
             & (discontinuity <= 0.35)
         )
         # Use true 3-D point-to-plane distance, not vertical Z difference.

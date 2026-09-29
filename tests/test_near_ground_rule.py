@@ -163,6 +163,12 @@ def test_steep_talude_uses_true_point_to_plane_ten_cm_rule():
     metrics = tin.metrics(x, y, z)
     assert float(metrics["vertical_residual"][0]) > 0.10
     assert float(metrics["plane_distance"][0]) < 0.10
+    # The Delaunay diagonal is longer than the nominal edge limit. The
+    # near-ground rescue must still accept this regular supported facet.
+    assert float(metrics["max_edge"][0]) > model.max_triangle_edge
+    assert float(metrics["max_edge"][0]) <= (
+        model.max_triangle_edge * np.sqrt(2.0) + 1e-9
+    )
 
     classes = model.classify_points(_FakePoints(1), x, y, z)
     assert int(classes[0]) == int(GROUND_CLASS)
