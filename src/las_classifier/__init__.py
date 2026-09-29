@@ -1,3 +1,3 @@
 """LAS-CAFIISICA package."""
 
-__version__ = "0.5.8-dev"
+__version__ = "0.6.0-dev"

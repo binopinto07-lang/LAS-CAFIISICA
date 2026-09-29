@@ -470,6 +470,8 @@ class MainWindow(QMainWindow):
             ("Occluded vegetation gaps", "occluded_gap_count"),
             ("Rejected gaps", "rejected_gap_count"),
             ("Synthetic ground", "synthetic_fill_point_count"),
+            ("Terrain 3D voxels", "terrain3d_voxel_count"),
+            ("Terrain 3D seed voxels", "terrain3d_seed_voxel_count"),
         ):
             if hasattr(result, attr):
                 lines.append(f"{label}: {getattr(result, attr):,}")
