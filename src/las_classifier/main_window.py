@@ -100,6 +100,17 @@ class MainWindow(QMainWindow):
         )
         self.profile_combo.setCurrentText("Mountain / Talude")
 
+        self.source_combo = QComboBox()
+        self.source_combo.addItems(
+            [
+                "Auto detect",
+                "DJI Zenmuse L3 / LiDAR",
+                "DJI Zenmuse P1 / Photogrammetry",
+                "Unknown",
+            ]
+        )
+        self.source_combo.setCurrentText("Auto detect")
+
         self.fill_spacing_spin = self._spin(
             0.0,
             0.0,
@@ -117,6 +128,7 @@ class MainWindow(QMainWindow):
         form.addRow("Engine", self.engine_combo)
         form.addRow("Ground quality", self.quality_combo)
         form.addRow("Profile", self.profile_combo)
+        form.addRow("Source", self.source_combo)
         form.addRow(
             "Synthetic spacing (m)",
             self.fill_spacing_spin,
@@ -406,6 +418,16 @@ class MainWindow(QMainWindow):
             )
         return params
 
+    def _source_override(self) -> str | None:
+        text = self.source_combo.currentText()
+        if text == "DJI Zenmuse L3 / LiDAR":
+            return "L3_LIDAR"
+        if text == "DJI Zenmuse P1 / Photogrammetry":
+            return "P1_PHOTOGRAMMETRY"
+        if text == "Unknown":
+            return "UNKNOWN"
+        return None
+
     def _legacy_params(self) -> SMRFParams:
         fill_spacing = self.fill_spacing_spin.value()
         return SMRFParams(
@@ -433,7 +455,8 @@ class MainWindow(QMainWindow):
             engine,
             self._engine_params(),
             self._legacy_params(),
-            self,
+            source_override=self._source_override(),
+            parent=self,
         )
         worker.progress_changed.connect(self._set_progress)
         worker.completed.connect(self._ground_succeeded)
@@ -472,9 +495,18 @@ class MainWindow(QMainWindow):
             ("Synthetic ground", "synthetic_fill_point_count"),
             ("Terrain 3D voxels", "terrain3d_voxel_count"),
             ("Terrain 3D seed voxels", "terrain3d_seed_voxel_count"),
+            ("L3 recovered measured points", "l3_recovered_count"),
+            ("L3 recovery voxels", "l3_recovery_voxel_count"),
         ):
             if hasattr(result, attr):
                 lines.append(f"{label}: {getattr(result, attr):,}")
+
+        if hasattr(result, "source_type"):
+            lines.append(
+                "Source used: "
+                f"{result.source_type} "
+                f"({getattr(result, 'source_confidence', 0.0) * 100:.1f}%)"
+            )
 
         if hasattr(result, "mean_confidence"):
             lines.append(

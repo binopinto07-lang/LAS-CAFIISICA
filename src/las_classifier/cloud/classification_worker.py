@@ -66,6 +66,7 @@ class GroundEngineWorker(QThread):
         engine_name: str,
         params: GroundEngineParams,
         smrf_params: SMRFParams | None = None,
+        source_override: str | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -73,6 +74,7 @@ class GroundEngineWorker(QThread):
         self.engine_name = engine_name
         self.params = params
         self.smrf_params = smrf_params
+        self.source_override = source_override
 
     def run(self) -> None:
         callback = (
@@ -106,6 +108,7 @@ class GroundEngineWorker(QThread):
                     self.cloud,
                     self.params,
                     callback,
+                    source_override=self.source_override,
                 )
         except Exception as exc:
             LOGGER.exception(

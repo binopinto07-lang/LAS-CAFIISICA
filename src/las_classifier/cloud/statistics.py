@@ -8,6 +8,8 @@ import numpy as np
 
 from .crs import WORKING_CRS
 from .model import CloudModel
+from ..terrain.schema import SourceInspection
+from ..terrain.source_inspector import inspect_source
 
 
 LOGGER = logging.getLogger("las_cafiisica.cloud.statistics")
@@ -27,6 +29,7 @@ class CloudStatistics:
     original_class_histogram: dict[int, int]
     approximate_xy_density: float | None
     approximate_point_spacing: float | None
+    source_inspection: SourceInspection
 
     def as_display_lines(self) -> list[str]:
         density = (
@@ -48,6 +51,12 @@ class CloudStatistics:
             )
             or "empty"
         )
+        source = self.source_inspection
+        evidence = (
+            "; ".join(source.evidence)
+            if source.evidence
+            else "none"
+        )
         return [
             f"File: {self.file_name}",
             f"LAS version: {self.las_version}",
@@ -61,6 +70,21 @@ class CloudStatistics:
             f"Approx. point spacing: {spacing}",
             f"Original classification: {histogram}",
             f"Dimensions: {', '.join(self.dimensions)}",
+            (
+                "Source detected: "
+                f"{source.source_type.value} "
+                f"({source.confidence * 100:.1f}%)"
+            ),
+            f"Source evidence: {evidence}",
+            (
+                "Returns sample: "
+                f"max return={source.max_return_number}, "
+                f"max returns={source.max_number_of_returns}, "
+                f"multi={source.multi_return_fraction:.3%}, "
+                f"last={source.last_return_fraction:.3%}, "
+                f"only={source.only_return_fraction:.3%}"
+            ),
+            f"Generating software: {source.generating_software or 'n/a'}",
         ]
 
 
@@ -103,6 +127,8 @@ def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
     )
     spacing = sqrt(1.0 / density) if density and density > 0 else None
 
+    source_inspection = inspect_source(cloud)
+
     result = CloudStatistics(
         file_name=cloud.path.name,
         las_version=str(cloud.las.header.version),
@@ -116,6 +142,7 @@ def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
         original_class_histogram=_classification_histogram(cloud),
         approximate_xy_density=density,
         approximate_point_spacing=spacing,
+        source_inspection=source_inspection,
     )
     LOGGER.info("BOUNDS=%s -> %s", result.min_xyz, result.max_xyz)
     LOGGER.info("WORKING_CRS=%s", result.crs)
@@ -126,6 +153,11 @@ def calculate_statistics(cloud: CloudModel) -> CloudStatistics:
     LOGGER.info(
         "CLASS_HISTOGRAM_ORIGINAL=%s",
         result.original_class_histogram,
+    )
+    LOGGER.info(
+        "SOURCE_TYPE=%s SOURCE_CONFIDENCE=%.3f",
+        result.source_inspection.source_type.value,
+        result.source_inspection.confidence,
     )
     LOGGER.info("POINT_SPACING=%s", result.approximate_point_spacing)
     LOGGER.info("DENSITY=%s", result.approximate_xy_density)

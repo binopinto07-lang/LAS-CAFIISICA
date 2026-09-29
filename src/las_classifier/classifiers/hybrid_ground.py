@@ -9,6 +9,13 @@ import numpy as np
 
 from ..cloud.model import CloudModel
 from ..ground.types import GroundEngineParams
+from ..terrain.l3_recovery import (
+    L3RecoveryModel,
+    L3RecoveryParams,
+    build_l3_recovery,
+)
+from ..terrain.schema import SourceInspection, SourceType
+from ..terrain.source_inspector import inspect_source
 from .adaptive_ptd import (
     AdaptivePTDModel,
     GROUND_CLASS,
@@ -34,6 +41,43 @@ def _emit(
 ) -> None:
     if callback is not None:
         callback(max(0, min(100, int(percent))), message)
+
+
+def _l3_params(
+    params: GroundEngineParams,
+) -> L3RecoveryParams:
+    quality = params.quality
+    if quality == "extreme":
+        return L3RecoveryParams(
+            sample_target=8_000_000,
+            voxel_size=0.35,
+            max_plane_distance=0.22,
+            min_points_per_voxel=3,
+            min_seed_fraction=0.06,
+            min_geometry_score=0.30,
+            strong_geometry_score=0.58,
+        )
+    if quality == "high":
+        return L3RecoveryParams(
+            sample_target=5_000_000,
+            voxel_size=0.45,
+            max_plane_distance=0.24,
+            min_points_per_voxel=3,
+            min_seed_fraction=0.08,
+            min_geometry_score=0.32,
+            strong_geometry_score=0.60,
+        )
+    if quality == "fast":
+        return L3RecoveryParams(
+            sample_target=1_000_000,
+            voxel_size=0.75,
+            max_plane_distance=0.28,
+            min_points_per_voxel=4,
+            min_seed_fraction=0.12,
+            min_geometry_score=0.38,
+            strong_geometry_score=0.66,
+        )
+    return L3RecoveryParams()
 
 
 def _terrain3d_params(
@@ -87,7 +131,9 @@ class HybridGroundModel:
     ptd: AdaptivePTDModel
     csf: CSFModel
     terrain3d: Terrain3DRefinement | None = None
-    engine_name: str = "Hybrid 2.5D + 3D"
+    l3_recovery: L3RecoveryModel | None = None
+    source_inspection: SourceInspection | None = None
+    engine_name: str = "Hybrid Sensor-Aware"
 
     @property
     def synthetic_fill_point_count(self) -> int:
@@ -138,6 +184,21 @@ class HybridGroundModel:
             score[terrain3d_ground] = np.maximum(
                 score[terrain3d_ground],
                 0.99,
+            )
+
+        # L3 recovery uses measured return position as evidence, never as a
+        # stand-alone rule. Only voxels already supported by PTD geometry and
+        # local measured-return consistency are eligible.
+        if self.l3_recovery is not None and points is not None:
+            recovered = self.l3_recovery.recovered_mask(
+                points,
+                x,
+                y,
+                z,
+            )
+            score[recovered] = np.maximum(
+                score[recovered],
+                0.995,
             )
 
         return np.clip(score, 0.0, 1.0)
@@ -229,7 +290,11 @@ class HybridGroundResult:
     mean_confidence: float
     terrain3d_voxel_count: int = 0
     terrain3d_seed_voxel_count: int = 0
-    engine_name: str = "Hybrid 2.5D + 3D"
+    l3_recovered_count: int = 0
+    l3_recovery_voxel_count: int = 0
+    source_type: str = "UNKNOWN"
+    source_confidence: float = 0.0
+    engine_name: str = "Hybrid Sensor-Aware"
     ground_only: bool = True
 
     @property
@@ -241,11 +306,22 @@ def run_hybrid_ground(
     cloud: CloudModel,
     params: GroundEngineParams | None = None,
     progress: ProgressCallback | None = None,
+    source_override: SourceType | str | None = None,
 ) -> HybridGroundResult:
     params = params or GroundEngineParams()
     started = perf_counter()
     LOGGER.info("GROUND_ENGINE_START")
-    LOGGER.info("GROUND_ENGINE=HYBRID_2_5D_PLUS_3D")
+    LOGGER.info("GROUND_ENGINE=HYBRID_SENSOR_AWARE")
+    inspection = inspect_source(
+        cloud,
+        override=source_override,
+    )
+    LOGGER.info(
+        "GROUND_SOURCE type=%s confidence=%.3f evidence=%s",
+        inspection.source_type.value,
+        inspection.confidence,
+        "; ".join(inspection.evidence),
+    )
 
     def ptd_progress(percent: int, message: str) -> None:
         _emit(
@@ -278,6 +354,19 @@ def run_hybrid_ground(
     _emit(
         progress,
         63,
+        "Hybrid: sensor-aware measured ground recovery",
+    )
+    l3_recovery = build_l3_recovery(
+        cloud,
+        ptd_result.model,
+        inspection,
+        progress,
+        _l3_params(params),
+    )
+
+    _emit(
+        progress,
+        72,
         "Hybrid: building true 3D terrain surface",
     )
     terrain3d = build_terrain3d_refinement(
@@ -292,12 +381,15 @@ def run_hybrid_ground(
         ptd=ptd_result.model,
         csf=csf_result.model,
         terrain3d=terrain3d,
+        l3_recovery=l3_recovery,
+        source_inspection=inspection,
     )
 
     total = cloud.point_count
     ground_count = 0
     confidence_sum = 0.0
     confidence_n = 0
+    l3_recovered_count = 0
     scales = cloud.las.header.scales
     offsets = cloud.las.header.offsets
 
@@ -343,6 +435,24 @@ def run_hybrid_ground(
             * scales[2]
             + offsets[2]
         )
+
+        if model.l3_recovery is not None:
+            l3_mask = model.l3_recovery.recovered_mask(
+                points,
+                x,
+                y,
+                z,
+            )
+            source_class = np.asarray(
+                points.classification,
+                dtype=np.uint8,
+            )
+            l3_recovered_count += int(
+                np.count_nonzero(
+                    l3_mask
+                    & (source_class != GROUND_CLASS)
+                )
+            )
 
         classes = model.classify_points(
             points,
@@ -408,6 +518,15 @@ def run_hybrid_ground(
         terrain3d_seeds,
     )
     LOGGER.info(
+        "L3_RECOVERED=%d L3_RECOVERY_VOXELS=%d",
+        l3_recovered_count,
+        (
+            model.l3_recovery.approved_voxel_count
+            if model.l3_recovery is not None
+            else 0
+        ),
+    )
+    LOGGER.info(
         "GAPS_TOTAL=%d GAPS_SUPPORTED=%d "
         "GAPS_OCCLUDED=%d GAPS_REJECTED=%d",
         ptd_result.detected_gap_count,
@@ -460,4 +579,12 @@ def run_hybrid_ground(
         mean_confidence=mean_confidence,
         terrain3d_voxel_count=terrain3d_voxels,
         terrain3d_seed_voxel_count=terrain3d_seeds,
+        l3_recovered_count=l3_recovered_count,
+        l3_recovery_voxel_count=(
+            model.l3_recovery.approved_voxel_count
+            if model.l3_recovery is not None
+            else 0
+        ),
+        source_type=inspection.source_type.value,
+        source_confidence=inspection.confidence,
     )
