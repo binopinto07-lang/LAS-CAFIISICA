@@ -12,6 +12,7 @@ from las_classifier.classifiers.smrf import (
 from las_classifier.cloud.loader import load_cloud
 from las_classifier.viewer.converter import (
     _write_classified_viewer_laz,
+    _write_original_viewer_laz,
 )
 
 
@@ -84,3 +85,68 @@ def test_classified_viewer_cloud_is_sampled_and_keeps_fill(tmp_path):
         classes[synthetic.astype(bool)]
         == GROUND_CLASS
     )
+
+
+def test_original_viewer_is_normalized_for_potree_bounds(tmp_path):
+    source = tmp_path / "precision_source.las"
+    header = laspy.LasHeader(
+        point_format=3,
+        version="1.2",
+    )
+    header.scales = np.array(
+        [1e-8, 1e-8, 1e-8],
+        dtype=np.float64,
+    )
+    header.offsets = np.array(
+        [55490.0, 162360.0, 177.0],
+        dtype=np.float64,
+    )
+    las = laspy.LasData(header)
+    count = 101
+    step = np.arange(count, dtype=np.float64)
+    las.x = 55490.275578279325 + step * 0.00012345
+    las.y = 162360.3428948692 + step * 0.00023456
+    las.z = 177.00068884629462 + step * 0.00034567
+    las.classification = np.where(
+        (step.astype(np.int64) % 2) == 0,
+        2,
+        1,
+    ).astype(np.uint8)
+    las.red = np.full(count, 12000, dtype=np.uint16)
+    las.green = np.full(count, 22000, dtype=np.uint16)
+    las.blue = np.full(count, 32000, dtype=np.uint16)
+    las.write(source)
+
+    output = tmp_path / "original_viewer.laz"
+    _write_original_viewer_laz(
+        source,
+        output,
+        max_points=20,
+    )
+
+    viewer = laspy.read(output)
+
+    assert len(viewer.points) <= 20
+    assert viewer.header.point_format.id == 3
+    assert np.allclose(
+        viewer.header.scales,
+        [0.001, 0.001, 0.001],
+    )
+    assert np.all(np.isfinite(viewer.x))
+    assert np.all(np.isfinite(viewer.y))
+    assert np.all(np.isfinite(viewer.z))
+    assert np.all(np.asarray(viewer.red) > 0)
+    assert np.all(np.asarray(viewer.green) > 0)
+    assert np.all(np.asarray(viewer.blue) > 0)
+
+    mins = np.asarray(viewer.header.mins)
+    maxs = np.asarray(viewer.header.maxs)
+    xyz = np.column_stack(
+        (
+            np.asarray(viewer.x),
+            np.asarray(viewer.y),
+            np.asarray(viewer.z),
+        )
+    )
+    assert np.all(xyz >= mins - 0.001)
+    assert np.all(xyz <= maxs + 0.001)

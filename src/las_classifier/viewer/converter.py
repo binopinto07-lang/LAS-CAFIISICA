@@ -306,13 +306,18 @@ def _run_converter(
         text=True,
         encoding="utf-8",
         errors="replace",
+        cwd=str(converter.parent),
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert proc.stdout is not None
+    output_tail: list[str] = []
     for line in proc.stdout:
         clean = line.rstrip("\r\n")
         if clean:
             LOGGER.info("POTREE %s", clean)
+            output_tail.append(clean)
+            if len(output_tail) > 30:
+                del output_tail[0]
         lower = clean.lower()
         if "counting" in lower:
             _emit(progress, 15, "Potree: counting points")
@@ -326,9 +331,18 @@ def _run_converter(
     code = proc.wait()
     metadata = output / "metadata.json"
     if code != 0 or not metadata.is_file():
+        detail = "\n".join(output_tail[-12:])
+        hint = ""
+        if code == 123:
+            hint = (
+                " PotreeConverter 2.1 reportou erro 123, normalmente ligado "
+                "a um ponto fora do bounding box declarado; a cloud de viewer "
+                "já foi normalizada para escala segura de 1 mm."
+            )
         raise RuntimeError(
             f"PotreeConverter terminou com código {code}; "
-            f"metadata.json não foi criado em {output}"
+            f"metadata.json não foi criado em {output}.{hint}"
+            + (f"\nÚltimas mensagens Potree:\n{detail}" if detail else "")
         )
     _emit(progress, 100, "Viewport 3D ready")
 
