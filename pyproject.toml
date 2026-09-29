@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "las-cafiisica"
-version = "0.7.0.dev0"
+version = "0.7.1.dev0"
 description = "Professional LAS/LAZ ground extraction and reconstruction with Potree viewport"
 readme = "README.md"
 requires-python = ">=3.12"
