@@ -133,7 +133,7 @@ class HybridGroundModel:
     terrain3d: Terrain3DRefinement | None = None
     l3_recovery: L3RecoveryModel | None = None
     source_inspection: SourceInspection | None = None
-    engine_name: str = "Hybrid Sensor-Aware"
+    engine_name: str = "Hybrid"
 
     @property
     def synthetic_fill_point_count(self) -> int:
@@ -294,7 +294,7 @@ class HybridGroundResult:
     l3_recovery_voxel_count: int = 0
     source_type: str = "UNKNOWN"
     source_confidence: float = 0.0
-    engine_name: str = "Hybrid Sensor-Aware"
+    engine_name: str = "Hybrid"
     ground_only: bool = True
 
     @property
