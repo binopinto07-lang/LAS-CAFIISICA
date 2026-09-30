@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "L3 Dense Ground R19",
                 "L3 Ground Lab",
                 "Hybrid",
                 "Adaptive PTD",
@@ -80,7 +81,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("L3 Ground Lab")
+        self.engine_combo.setCurrentText("L3 Dense Ground R19")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -429,15 +430,18 @@ class MainWindow(QMainWindow):
         self,
         engine: str,
     ) -> None:
-        l3_lab = engine == "L3 Ground Lab"
-        if l3_lab:
+        measured_l3 = engine in {
+            "L3 Dense Ground R19",
+            "L3 Ground Lab",
+        }
+        if measured_l3:
             self.include_synthetic.setChecked(False)
             self.fill_spacing_spin.setValue(0.0)
         self.include_synthetic.setEnabled(
-            not l3_lab
+            not measured_l3
         )
         self.fill_spacing_spin.setEnabled(
-            not l3_lab
+            not measured_l3
         )
 
     def _source_override(self) -> str | None:
