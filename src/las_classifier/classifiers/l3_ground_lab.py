@@ -774,33 +774,6 @@ def run_l3_ground_lab(
         ),
         source_inspection=inspection,
         engine_name=engine_name,
-        no_spatial_evidence_count=(
-            gate_diagnostics.no_spatial_evidence
-        ),
-        surface_gate_fail_count=(
-            gate_diagnostics.surface_gate_fail
-        ),
-        spatial_gate_fail_count=(
-            gate_diagnostics.spatial_gate_fail
-        ),
-        vegetation_gate_count=(
-            gate_diagnostics.vegetation_gate
-        ),
-        object_roughness_count=(
-            gate_diagnostics.object_roughness
-        ),
-        normal_mismatch_count=(
-            gate_diagnostics.normal_mismatch
-        ),
-        invalid_gate_count=(
-            gate_diagnostics.invalid
-        ),
-        score_below_high_count=(
-            gate_diagnostics.score_below_high
-        ),
-        score_below_medium_count=(
-            gate_diagnostics.score_below_medium
-        ),
     )
 
     totals = {
@@ -1176,4 +1149,31 @@ def run_l3_ground_lab(
             inspection.confidence
         ),
         engine_name=engine_name,
+        no_spatial_evidence_count=(
+            gate_diagnostics.no_spatial_evidence
+        ),
+        surface_gate_fail_count=(
+            gate_diagnostics.surface_gate_fail
+        ),
+        spatial_gate_fail_count=(
+            gate_diagnostics.spatial_gate_fail
+        ),
+        vegetation_gate_count=(
+            gate_diagnostics.vegetation_gate
+        ),
+        object_roughness_count=(
+            gate_diagnostics.object_roughness
+        ),
+        normal_mismatch_count=(
+            gate_diagnostics.normal_mismatch
+        ),
+        invalid_gate_count=(
+            gate_diagnostics.invalid
+        ),
+        score_below_high_count=(
+            gate_diagnostics.score_below_high
+        ),
+        score_below_medium_count=(
+            gate_diagnostics.score_below_medium
+        ),
     )
