@@ -3,6 +3,10 @@ from __future__ import annotations
 import numpy as np
 
 from las_classifier.terrain.dense_spatial_evidence import DenseSpatialEvidenceGrid
+from las_classifier.terrain.ground_evidence import (
+    GroundEvidenceConfig,
+    GroundEvidenceScorer,
+)
 
 
 def _grid(order: np.ndarray) -> DenseSpatialEvidenceGrid:
@@ -141,3 +145,43 @@ def test_grid_memory_guard_grows_cell_size_for_huge_extent():
     )
     assert grid.cell_count <= 101_000
     assert grid.cell_size > 0.4
+
+
+def test_ground_decisions_are_invariant_after_point_permutation():
+    first = _grid(np.arange(10))
+    second = _grid(np.array([9, 1, 6, 2, 8, 0, 5, 4, 7, 3]))
+
+    x = np.array([0.10, 0.12, 0.42, 0.44, 0.78, 0.81, 1.12, 1.18, 1.45, 1.48])
+    y = np.array([0.10, 0.12, 0.10, 0.12, 0.10, 0.12, 0.10, 0.12, 0.10, 0.12])
+    ptd = np.array([0.90, 0.80, 0.91, 0.20, 0.95, 0.70, 0.88, 0.10, 0.92, 0.80])
+    vertical = np.array([0.01, 0.02, 0.03, 0.04, 0.02, 0.08, 0.03, 0.09, 0.01, 0.02])
+    plane = np.array([0.01, 0.02, 0.04, 0.10, 0.02, 0.05, 0.03, 0.12, 0.01, 0.02])
+    classes = np.array([2, 2, 2, 1, 2, 1, 1, 1, 2, 1], dtype=np.uint8)
+
+    config = GroundEvidenceConfig(
+        surface_scale=0.28,
+        detrend_scale=0.50,
+        vertical_spread_limit=0.75,
+        roughness_scale=0.20,
+    )
+    scorer = GroundEvidenceScorer(config)
+    decisions = []
+    ground_counts = []
+    for grid in (first, second):
+        neighbour, spread, roughness, presence = grid.query_with_presence(x, y)
+        evidence = scorer.evaluate(
+            ptd_score=ptd,
+            tin_residual=plane,
+            vertical_residual=vertical,
+            detrended_residual=vertical,
+            neighbour_support=neighbour,
+            vertical_spread=spread,
+            roughness=roughness,
+            original_class=classes,
+            spatial_presence=presence,
+        )
+        decisions.append(evidence.decision)
+        ground_counts.append(int(np.count_nonzero(evidence.classifications() == 2)))
+
+    np.testing.assert_array_equal(decisions[0], decisions[1])
+    assert ground_counts[0] == ground_counts[1]
