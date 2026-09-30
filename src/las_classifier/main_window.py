@@ -536,15 +536,6 @@ class MainWindow(QMainWindow):
             ("L3 invalid returns", "return_invalid_count"),
             ("L3 spatial cells", "context_cell_count"),
             ("L3 coarse representatives", "coarse_representative_count"),
-            ("R19 no spatial evidence", "no_spatial_evidence_count"),
-            ("R19 surface gate fail", "surface_gate_fail_count"),
-            ("R19 spatial gate fail", "spatial_gate_fail_count"),
-            ("R19 vegetation gate", "vegetation_gate_count"),
-            ("R19 object roughness", "object_roughness_count"),
-            ("R19 normal mismatch", "normal_mismatch_count"),
-            ("R19 invalid gate", "invalid_gate_count"),
-            ("R19 score below high", "score_below_high_count"),
-            ("R19 score below medium", "score_below_medium_count"),
             ("PTD Ground votes", "ptd_vote_count"),
             ("SMRF Ground votes", "smrf_vote_count"),
             ("CSF Ground votes", "csf_vote_count"),
@@ -554,6 +545,22 @@ class MainWindow(QMainWindow):
         ):
             if hasattr(result, attr):
                 lines.append(f"{label}: {getattr(result, attr):,}")
+
+        if engine == "L3 Dense Ground R19":
+            for label, attr in (
+                ("R19 no spatial evidence", "no_spatial_evidence_count"),
+                ("R19 surface gate fail", "surface_gate_fail_count"),
+                ("R19 spatial gate fail", "spatial_gate_fail_count"),
+                ("R19 vegetation gate", "vegetation_gate_count"),
+                ("R19 object roughness", "object_roughness_count"),
+                ("R19 normal mismatch", "normal_mismatch_count"),
+                ("R19 invalid gate", "invalid_gate_count"),
+                ("R19 score below high", "score_below_high_count"),
+                ("R19 score below medium", "score_below_medium_count"),
+            ):
+                lines.append(
+                    f"{label}: {getattr(result, attr, 0):,}"
+                )
 
         if hasattr(result, "source_type"):
             lines.append(
