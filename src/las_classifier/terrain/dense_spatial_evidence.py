@@ -119,6 +119,7 @@ class DenseSpatialEvidenceGrid:
     max_z: np.ndarray
     min_vertical_residual: np.ndarray
     max_vertical_residual: np.ndarray
+    ptd_score_sum: np.ndarray
     plane_distance_sum: np.ndarray
     class2_count: np.ndarray
     return_only_count: np.ndarray
@@ -165,6 +166,7 @@ class DenseSpatialEvidenceGrid:
             max_z=np.full(cells, -np.inf, dtype=np.float32),
             min_vertical_residual=np.full(cells, np.inf, dtype=np.float32),
             max_vertical_residual=np.full(cells, -np.inf, dtype=np.float32),
+            ptd_score_sum=np.zeros(cells, dtype=np.float64),
             plane_distance_sum=np.zeros(cells, dtype=np.float64),
             class2_count=np.zeros(cells, dtype=np.int32),
             return_only_count=np.zeros(cells, dtype=np.int32),
@@ -308,6 +310,11 @@ class DenseSpatialEvidenceGrid:
         )
         self.max_vertical_residual[unique] = np.maximum(
             self.max_vertical_residual[unique], local_max_v
+        )
+        self.ptd_score_sum[unique] += np.bincount(
+            inverse,
+            weights=ptd[ids],
+            minlength=unique.size,
         )
         self.plane_distance_sum[unique] += np.bincount(
             inverse,
