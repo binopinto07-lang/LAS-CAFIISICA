@@ -105,6 +105,8 @@ class GroundEvidence:
     score: np.ndarray
     decision: np.ndarray
     provenance: np.ndarray
+    spatial_presence: np.ndarray | None = None
+    rejection_reason: np.ndarray | None = None
 
     def classifications(self) -> np.ndarray:
         classes = np.full(
@@ -211,6 +213,7 @@ class GroundEvidenceScorer:
         point_source_id: np.ndarray | None = None,
         invalid_mask: np.ndarray | None = None,
         source_noise_mask: np.ndarray | None = None,
+        spatial_presence: np.ndarray | None = None,
     ) -> GroundEvidence:
         ptd = np.asarray(ptd_score, dtype=np.float64)
         count = ptd.shape[0]
@@ -561,4 +564,12 @@ class GroundEvidenceScorer:
             ),
             decision=decision,
             provenance=provenance,
+            spatial_presence=(
+                np.asarray(
+                    spatial_presence,
+                    dtype=np.bool_,
+                )
+                if spatial_presence is not None
+                else None
+            ),
         )
