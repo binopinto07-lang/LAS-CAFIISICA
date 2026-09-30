@@ -10,6 +10,10 @@ import numpy as np
 from ..cloud.model import CloudModel
 from ..ground.local_geometry import normal_alignment, point_normals
 from ..ground.types import GroundEngineParams
+from ..terrain.ground_debug import (
+    GroundGateDiagnostics,
+    diagnose_ground_gates,
+)
 from ..terrain.ground_evidence import (
     GroundDecision,
     GroundEvidence,
@@ -156,7 +160,7 @@ class L3GroundLabModel:
     params: GroundEngineParams
     ptd: AdaptivePTDModel
     smrf: SMRFModel
-    context: L3SpatialContext
+    context: object
     coarse_detrend: CoarseDetrendModel | None
     scorer: GroundEvidenceScorer
     source_inspection: SourceInspection
@@ -204,14 +208,29 @@ class L3GroundLabModel:
                 dtype=np.float64,
             )
 
-        (
-            neighbour,
-            spread,
-            roughness,
-        ) = self.context.query(
-            x,
-            y,
-        )
+        if hasattr(
+            self.context,
+            "query_with_presence",
+        ):
+            (
+                neighbour,
+                spread,
+                roughness,
+                spatial_presence,
+            ) = self.context.query_with_presence(
+                x,
+                y,
+            )
+        else:
+            (
+                neighbour,
+                spread,
+                roughness,
+            ) = self.context.query(
+                x,
+                y,
+            )
+            spatial_presence = None
 
         normals = (
             point_normals(points)
@@ -314,7 +333,7 @@ class L3GroundLabModel:
                 dtype=np.float64,
             )
 
-        return self.scorer.evaluate(
+        evidence = self.scorer.evaluate(
             ptd_score=ptd_score,
             tin_residual=(
                 metrics["plane_distance"]
@@ -340,7 +359,31 @@ class L3GroundLabModel:
             point_source_id=point_source_id,
             invalid_mask=invalid,
             source_noise_mask=None,
+            spatial_presence=spatial_presence,
         )
+        return evidence
+
+    def rejection_reason_points(
+        self,
+        points,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        evidence = self._evaluate(
+            points,
+            x,
+            y,
+            z,
+        )
+        _, reason = diagnose_ground_gates(
+            evidence,
+            self.scorer.config,
+            spatial_presence=(
+                evidence.spatial_presence
+            ),
+        )
+        return reason
 
     def evaluate_points(
         self,
@@ -454,6 +497,15 @@ class L3GroundLabResult:
     source_confidence: float
     engine_name: str = "L3 Ground Lab"
     ground_only: bool = True
+    no_spatial_evidence_count: int = 0
+    surface_gate_fail_count: int = 0
+    spatial_gate_fail_count: int = 0
+    vegetation_gate_count: int = 0
+    object_roughness_count: int = 0
+    normal_mismatch_count: int = 0
+    invalid_gate_count: int = 0
+    score_below_high_count: int = 0
+    score_below_medium_count: int = 0
 
     @property
     def point_count(self) -> int:
@@ -554,6 +606,7 @@ def run_l3_ground_lab(
     context_builder: Callable | None = None,
     engine_name: str = "L3 Ground Lab",
     revision_label: str = "R18",
+    collect_gate_diagnostics: bool = False,
 ) -> L3GroundLabResult:
     started = perf_counter()
     requested = (
@@ -721,6 +774,33 @@ def run_l3_ground_lab(
         ),
         source_inspection=inspection,
         engine_name=engine_name,
+        no_spatial_evidence_count=(
+            gate_diagnostics.no_spatial_evidence
+        ),
+        surface_gate_fail_count=(
+            gate_diagnostics.surface_gate_fail
+        ),
+        spatial_gate_fail_count=(
+            gate_diagnostics.spatial_gate_fail
+        ),
+        vegetation_gate_count=(
+            gate_diagnostics.vegetation_gate
+        ),
+        object_roughness_count=(
+            gate_diagnostics.object_roughness
+        ),
+        normal_mismatch_count=(
+            gate_diagnostics.normal_mismatch
+        ),
+        invalid_gate_count=(
+            gate_diagnostics.invalid
+        ),
+        score_below_high_count=(
+            gate_diagnostics.score_below_high
+        ),
+        score_below_medium_count=(
+            gate_diagnostics.score_below_medium
+        ),
     )
 
     totals = {
@@ -740,6 +820,9 @@ def run_l3_ground_lab(
     return_first_multi = 0
     return_intermediate = 0
     return_invalid = 0
+    gate_diagnostics = (
+        GroundGateDiagnostics.zero()
+    )
 
     scales = cloud.las.header.scales
     offsets = cloud.las.header.offsets
@@ -796,6 +879,25 @@ def run_l3_ground_lab(
             y,
             z,
         )
+        if collect_gate_diagnostics:
+            (
+                chunk_diagnostics,
+                rejection_reason,
+            ) = diagnose_ground_gates(
+                evidence,
+                evidence_config,
+                spatial_presence=(
+                    evidence.spatial_presence
+                ),
+            )
+            evidence.rejection_reason = (
+                rejection_reason
+            )
+            gate_diagnostics = (
+                gate_diagnostics
+                + chunk_diagnostics
+            )
+
         for decision in totals:
             totals[decision] += int(
                 np.count_nonzero(
@@ -943,6 +1045,23 @@ def run_l3_ground_lab(
             else 0
         ),
     )
+    if collect_gate_diagnostics:
+        LOGGER.info(
+            "R19_GATES no_spatial=%d "
+            "surface_fail=%d spatial_fail=%d "
+            "vegetation=%d object_roughness=%d "
+            "normal_mismatch=%d invalid=%d "
+            "below_high=%d below_medium=%d",
+            gate_diagnostics.no_spatial_evidence,
+            gate_diagnostics.surface_gate_fail,
+            gate_diagnostics.spatial_gate_fail,
+            gate_diagnostics.vegetation_gate,
+            gate_diagnostics.object_roughness,
+            gate_diagnostics.normal_mismatch,
+            gate_diagnostics.invalid,
+            gate_diagnostics.score_below_high,
+            gate_diagnostics.score_below_medium,
+        )
     LOGGER.info(
         "SYNTHETIC_POINTS=0"
     )
