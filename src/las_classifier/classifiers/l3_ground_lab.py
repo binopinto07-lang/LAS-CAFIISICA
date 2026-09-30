@@ -550,6 +550,10 @@ def run_l3_ground_lab(
     params: GroundEngineParams | None = None,
     progress: ProgressCallback | None = None,
     source_override: SourceType | str | None = None,
+    *,
+    context_builder: Callable | None = None,
+    engine_name: str = "L3 Ground Lab",
+    revision_label: str = "R18",
 ) -> L3GroundLabResult:
     started = perf_counter()
     requested = (
@@ -570,10 +574,12 @@ def run_l3_ground_lab(
         "GROUND_ENGINE_START"
     )
     LOGGER.info(
-        "GROUND_ENGINE=L3_GROUND_EVIDENCE_R18"
+        "GROUND_ENGINE=L3_GROUND_EVIDENCE_%s",
+        revision_label,
     )
     LOGGER.info(
-        "R18_SYNTHETIC_POLICY=DISABLED"
+        "%s_SYNTHETIC_POLICY=DISABLED",
+        revision_label,
     )
 
     inspection = inspect_source(
@@ -585,7 +591,7 @@ def run_l3_ground_lab(
         is not SourceType.L3_LIDAR
     ):
         raise RuntimeError(
-            "R18 L3 Ground Lab aceita apenas "
+            f"{revision_label} L3 Ground Lab aceita apenas "
             "nuvens L3/LiDAR nesta fase. "
             "Source Inspector: "
             f"{inspection.source_type.value}."
@@ -644,18 +650,26 @@ def run_l3_ground_lab(
         count_full=False,
     )
 
-    context = build_l3_spatial_context(
-        cloud,
-        ptd_result.model,
-        sample_target=min(
-            1_500_000,
-            max(
-                250_000,
-                params.sample_target,
+    if context_builder is None:
+        context = build_l3_spatial_context(
+            cloud,
+            ptd_result.model,
+            sample_target=min(
+                1_500_000,
+                max(
+                    250_000,
+                    params.sample_target,
+                ),
             ),
-        ),
-        progress=progress,
-    )
+            progress=progress,
+        )
+    else:
+        context = context_builder(
+            cloud,
+            ptd_result.model,
+            params,
+            progress,
+        )
 
     spacing = max(
         float(
@@ -706,6 +720,7 @@ def run_l3_ground_lab(
             evidence_config
         ),
         source_inspection=inspection,
+        engine_name=engine_name,
     )
 
     totals = {
@@ -904,10 +919,24 @@ def run_l3_ground_lab(
         return_intermediate,
         return_invalid,
     )
+    context_cells = int(
+        getattr(
+            context,
+            "occupied_cell_count",
+            0,
+        )
+    )
+    if (
+        context_cells <= 0
+        and hasattr(context, "keys")
+    ):
+        context_cells = int(
+            context.keys.size
+        )
     LOGGER.info(
         "L3_CONTEXT cells=%d "
         "coarse_representatives=%d",
-        context.keys.size,
+        context_cells,
         (
             coarse.representative_count
             if coarse is not None
@@ -929,7 +958,7 @@ def run_l3_ground_lab(
     _emit(
         progress,
         100,
-        "R18 L3 Ground Evidence complete",
+        f"{revision_label} L3 Ground Evidence complete",
     )
     return L3GroundLabResult(
         model=model,
@@ -1013,8 +1042,8 @@ def run_l3_ground_lab(
         return_invalid_count=(
             return_invalid
         ),
-        context_cell_count=int(
-            context.keys.size
+        context_cell_count=(
+            context_cells
         ),
         coarse_representative_count=(
             coarse.representative_count
@@ -1027,4 +1056,5 @@ def run_l3_ground_lab(
         source_confidence=(
             inspection.confidence
         ),
+        engine_name=engine_name,
     )
