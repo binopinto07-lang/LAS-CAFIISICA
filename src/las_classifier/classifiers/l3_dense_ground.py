@@ -49,4 +49,5 @@ def run_l3_dense_ground(
         context_builder=_dense_context_builder,
         engine_name="L3 Dense Ground R19",
         revision_label="R19",
+        collect_gate_diagnostics=True,
     )
