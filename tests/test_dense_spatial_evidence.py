@@ -71,6 +71,7 @@ def test_dense_grid_is_point_order_invariant():
     for name in exact:
         np.testing.assert_array_equal(getattr(first, name), getattr(second, name))
 
+    np.testing.assert_allclose(first.ptd_score_sum, second.ptd_score_sum, atol=1e-12)
     np.testing.assert_allclose(first.plane_distance_sum, second.plane_distance_sum, atol=1e-12)
     np.testing.assert_allclose(first.intensity_sum, second.intensity_sum, atol=1e-12)
 
