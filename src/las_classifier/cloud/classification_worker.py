@@ -8,6 +8,7 @@ from PySide6.QtCore import QThread, Signal
 from ..classifiers.adaptive_ptd import run_adaptive_ptd
 from ..classifiers.csf_engine import run_csf
 from ..classifiers.hybrid_ground import run_hybrid_ground
+from ..classifiers.l3_dense_ground import run_l3_dense_ground
 from ..classifiers.l3_ground_lab import run_l3_ground_lab
 from ..classifiers.smrf import SMRFParams, SMRFResult, run_smrf
 from ..ground.ground_export import export_ground_only
@@ -85,7 +86,14 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "L3 Ground Lab":
+            if self.engine_name == "L3 Dense Ground R19":
+                result = run_l3_dense_ground(
+                    self.cloud,
+                    self.params,
+                    callback,
+                    source_override=self.source_override,
+                )
+            elif self.engine_name == "L3 Ground Lab":
                 result = run_l3_ground_lab(
                     self.cloud,
                     self.params,
