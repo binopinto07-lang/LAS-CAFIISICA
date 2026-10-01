@@ -48,6 +48,6 @@ def run_l3_dense_ground(
         source_override=source_override,
         context_builder=_dense_context_builder,
         engine_name="L3 Dense Ground R19",
-        revision_label="R19",
+        revision_label="R19.1",
         collect_gate_diagnostics=True,
     )
