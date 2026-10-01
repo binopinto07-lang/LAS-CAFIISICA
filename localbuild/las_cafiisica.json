@@ -229,7 +229,7 @@
     ]
   },
   "release": {},
-  "config_revision": 34,
+  "config_revision": 35,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -308,7 +308,8 @@
     "tools/LocalBuildManager_CLASSIFY_LAS/VERSION",
     "tools/LocalBuildManager_CLASSIFY_LAS/run.py",
     "tools/LocalBuildManager_CLASSIFY_LAS/app/ui/main_window.py",
-    "tools/LocalBuildManager_CLASSIFY_LAS/projects/las_cafiisica_ground_v2.json"
+    "tools/LocalBuildManager_CLASSIFY_LAS/projects/las_cafiisica_ground_v2.json",
+    "tests/test_import_order.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
