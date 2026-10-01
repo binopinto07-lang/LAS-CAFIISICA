@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import logging
 from math import ceil
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..cloud.model import CloudModel
 from .schema import SourceInspection, SourceType
+
+if TYPE_CHECKING:
+    from ..cloud.model import CloudModel
 
 
 LOGGER = logging.getLogger(
