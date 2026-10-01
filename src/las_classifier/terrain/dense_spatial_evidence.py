@@ -115,6 +115,7 @@ class DenseSpatialEvidenceGrid:
     neighbourhood_radius: int
     point_count: np.ndarray
     strong_count: np.ndarray
+    geometry_count: np.ndarray
     min_z: np.ndarray
     max_z: np.ndarray
     min_vertical_residual: np.ndarray
@@ -162,6 +163,7 @@ class DenseSpatialEvidenceGrid:
             neighbourhood_radius=radius,
             point_count=np.zeros(cells, dtype=np.int32),
             strong_count=np.zeros(cells, dtype=np.int32),
+            geometry_count=np.zeros(cells, dtype=np.int32),
             min_z=np.full(cells, np.inf, dtype=np.float32),
             max_z=np.full(cells, -np.inf, dtype=np.float32),
             min_vertical_residual=np.full(cells, np.inf, dtype=np.float32),
@@ -191,6 +193,14 @@ class DenseSpatialEvidenceGrid:
     @property
     def coverage_fraction(self) -> float:
         return self.occupied_cell_count / self.cell_count if self.cell_count else 0.0
+
+    @property
+    def measured_point_count(self) -> int:
+        return int(np.sum(self.point_count, dtype=np.int64))
+
+    @property
+    def geometry_point_count(self) -> int:
+        return int(np.sum(self.geometry_count, dtype=np.int64))
 
     @property
     def memory_bytes(self) -> int:
@@ -239,12 +249,20 @@ class DenseSpatialEvidenceGrid:
         vertical_residual: np.ndarray,
         plane_distance: np.ndarray,
         valid_mask: np.ndarray | None = None,
+        geometry_mask: np.ndarray | None = None,
         original_class: np.ndarray | None = None,
         return_number: np.ndarray | None = None,
         number_of_returns: np.ndarray | None = None,
         intensity: np.ndarray | None = None,
         invalid_mask: np.ndarray | None = None,
     ) -> None:
+        """Record measured presence independently of PTD/TIN validity.
+
+        An unsupported TIN facet is missing *geometric evidence*, not missing
+        physical points. Only supported PTD observations contribute to
+        confidence/plane/residual aggregates. Original class and return data
+        never promote unsupported observations into Ground by themselves.
+        """
         x = np.asarray(x, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
         z = np.asarray(z, dtype=np.float64)
@@ -252,8 +270,8 @@ class DenseSpatialEvidenceGrid:
         vertical = np.asarray(vertical_residual, dtype=np.float64)
         plane = np.asarray(plane_distance, dtype=np.float64)
         count = x.shape[0]
-        if any(values.shape[0] != count for values in (y, z, ptd, vertical, plane)):
-            raise ValueError("Dense spatial evidence input length mismatch")
+        if any(a.shape != x.shape for a in (y, z, ptd, vertical, plane)):
+            raise ValueError("Dense spatial evidence input shape mismatch")
 
         keys, inside, _, _ = self._flat_keys(x, y)
         self.processed_points += int(count)
@@ -262,8 +280,8 @@ class DenseSpatialEvidenceGrid:
             if invalid_mask is None
             else np.asarray(invalid_mask, dtype=np.bool_).copy()
         )
-        if hard_invalid.shape[0] != count:
-            raise ValueError("Dense spatial evidence invalid mask length mismatch")
+        if hard_invalid.shape != x.shape:
+            raise ValueError("Dense spatial evidence invalid mask shape mismatch")
         hard_invalid |= ~np.isfinite(z)
 
         invalid_ids = np.flatnonzero(inside & hard_invalid)
@@ -271,68 +289,71 @@ class DenseSpatialEvidenceGrid:
             unique, inverse = np.unique(keys[invalid_ids], return_inverse=True)
             self._add_counts(self.invalid_count, unique, inverse)
 
-        valid = (
-            inside
-            & ~hard_invalid
-            & np.isfinite(ptd)
-            & np.isfinite(vertical)
-            & np.isfinite(plane)
-        )
+        measured = inside & ~hard_invalid
         if valid_mask is not None:
             supplied = np.asarray(valid_mask, dtype=np.bool_)
-            if supplied.shape[0] != count:
-                raise ValueError("Dense spatial evidence valid mask length mismatch")
-            valid &= supplied
+            if supplied.shape != x.shape:
+                raise ValueError("Dense spatial evidence measured mask shape mismatch")
+            measured &= supplied
 
-        ids = np.flatnonzero(valid)
-        if ids.size == 0:
+        ids = np.flatnonzero(measured)
+        if not ids.size:
             return
 
         cell_keys = keys[ids]
         unique, inverse = np.unique(cell_keys, return_inverse=True)
         self._add_counts(self.point_count, unique, inverse)
 
-        strong = ptd[ids] >= self.strong_threshold
-        self._add_counts(self.strong_count, unique, inverse, strong)
-
         local_min_z = np.full(unique.size, np.inf, dtype=np.float64)
         local_max_z = np.full(unique.size, -np.inf, dtype=np.float64)
-        local_min_v = np.full(unique.size, np.inf, dtype=np.float64)
-        local_max_v = np.full(unique.size, -np.inf, dtype=np.float64)
         np.minimum.at(local_min_z, inverse, z[ids])
         np.maximum.at(local_max_z, inverse, z[ids])
-        np.minimum.at(local_min_v, inverse, vertical[ids])
-        np.maximum.at(local_max_v, inverse, vertical[ids])
         self.min_z[unique] = np.minimum(self.min_z[unique], local_min_z)
         self.max_z[unique] = np.maximum(self.max_z[unique], local_max_z)
-        self.min_vertical_residual[unique] = np.minimum(
-            self.min_vertical_residual[unique], local_min_v
-        )
-        self.max_vertical_residual[unique] = np.maximum(
-            self.max_vertical_residual[unique], local_max_v
-        )
-        self.ptd_score_sum[unique] += np.bincount(
-            inverse,
-            weights=ptd[ids],
-            minlength=unique.size,
-        )
-        self.plane_distance_sum[unique] += np.bincount(
-            inverse,
-            weights=plane[ids],
-            minlength=unique.size,
-        )
+
+        geometry = measured & np.isfinite(ptd) & np.isfinite(vertical) & np.isfinite(plane)
+        if geometry_mask is not None:
+            supplied = np.asarray(geometry_mask, dtype=np.bool_)
+            if supplied.shape != x.shape:
+                raise ValueError("Dense spatial evidence geometry mask shape mismatch")
+            geometry &= supplied
+        gids = np.flatnonzero(geometry)
+        strong_gids = np.empty(0, dtype=np.int64)
+        if gids.size:
+            gkeys, ginverse = np.unique(keys[gids], return_inverse=True)
+            self._add_counts(self.geometry_count, gkeys, ginverse)
+            strong = ptd[gids] >= self.strong_threshold
+            self._add_counts(self.strong_count, gkeys, ginverse, strong)
+            strong_gids = gids[strong]
+
+            local_min_v = np.full(gkeys.size, np.inf, dtype=np.float64)
+            local_max_v = np.full(gkeys.size, -np.inf, dtype=np.float64)
+            np.minimum.at(local_min_v, ginverse, vertical[gids])
+            np.maximum.at(local_max_v, ginverse, vertical[gids])
+            self.min_vertical_residual[gkeys] = np.minimum(
+                self.min_vertical_residual[gkeys], local_min_v
+            )
+            self.max_vertical_residual[gkeys] = np.maximum(
+                self.max_vertical_residual[gkeys], local_max_v
+            )
+            self.ptd_score_sum[gkeys] += np.bincount(
+                ginverse, weights=ptd[gids], minlength=gkeys.size
+            )
+            self.plane_distance_sum[gkeys] += np.bincount(
+                ginverse, weights=plane[gids], minlength=gkeys.size
+            )
 
         if original_class is not None:
             classes = np.asarray(original_class)
-            if classes.shape[0] != count:
-                raise ValueError("Dense spatial evidence class length mismatch")
+            if classes.shape != x.shape:
+                raise ValueError("Dense spatial evidence class shape mismatch")
             self._add_counts(self.class2_count, unique, inverse, classes[ids] == 2)
 
         if return_number is not None and number_of_returns is not None:
             rn = np.asarray(return_number, dtype=np.int16)
             nr = np.asarray(number_of_returns, dtype=np.int16)
-            if rn.shape[0] != count or nr.shape[0] != count:
-                raise ValueError("Dense spatial evidence return length mismatch")
+            if rn.shape != x.shape or nr.shape != x.shape:
+                raise ValueError("Dense spatial evidence return shape mismatch")
             vrn = rn[ids]
             vnr = nr[ids]
             return_valid = (vrn > 0) & (vnr > 0) & (vrn <= vnr)
@@ -340,10 +361,7 @@ class DenseSpatialEvidenceGrid:
                 (return_valid & (vrn == 1) & (vnr == 1), self.return_only_count),
                 (return_valid & (vnr > 1) & (vrn == vnr), self.return_last_multi_count),
                 (return_valid & (vnr > 1) & (vrn == 1), self.return_first_multi_count),
-                (
-                    return_valid & (vrn > 1) & (vrn < vnr),
-                    self.return_intermediate_count,
-                ),
+                (return_valid & (vrn > 1) & (vrn < vnr), self.return_intermediate_count),
                 (~return_valid, self.return_invalid_count),
             )
             for mask, target in masks:
@@ -351,29 +369,24 @@ class DenseSpatialEvidenceGrid:
 
         if intensity is not None:
             values = np.asarray(intensity, dtype=np.float64)
-            if values.shape[0] != count:
-                raise ValueError("Dense spatial evidence intensity length mismatch")
+            if values.shape != x.shape:
+                raise ValueError("Dense spatial evidence intensity shape mismatch")
             finite_i = np.isfinite(values[ids])
             if np.any(finite_i):
                 intensity_ids = ids[finite_i]
                 i_unique, i_inverse = np.unique(keys[intensity_ids], return_inverse=True)
                 self._add_counts(self.intensity_count, i_unique, i_inverse)
                 self.intensity_sum[i_unique] += np.bincount(
-                    i_inverse,
-                    weights=values[intensity_ids],
-                    minlength=i_unique.size,
+                    i_inverse, weights=values[intensity_ids], minlength=i_unique.size
                 )
-            strong_values = values[ids[strong]]
+            strong_values = values[strong_gids]
             finite_strong = np.isfinite(strong_values)
             if np.any(finite_strong):
                 bins = np.clip(
-                    np.rint(strong_values[finite_strong]),
-                    0,
-                    65_535,
+                    np.rint(strong_values[finite_strong]), 0, 65_535
                 ).astype(np.int64)
                 self.intensity_histogram += np.bincount(
-                    bins,
-                    minlength=65_536,
+                    bins, minlength=65_536
                 ).astype(np.uint64, copy=False)
 
     def finalize(self) -> None:
@@ -392,6 +405,7 @@ class DenseSpatialEvidenceGrid:
 
         local_count = np.zeros(count, dtype=np.int64)
         strong_count = np.zeros(count, dtype=np.int64)
+        geometry_count = np.zeros(count, dtype=np.int64)
         minimum = np.full(count, np.inf, dtype=np.float64)
         maximum = np.full(count, -np.inf, dtype=np.float64)
         plane_sum = np.zeros(count, dtype=np.float64)
@@ -411,10 +425,11 @@ class DenseSpatialEvidenceGrid:
                 cells = self.point_count[keys].astype(np.int64, copy=False)
                 local_count[target] += cells
                 strong_count[target] += self.strong_count[keys]
-                occupied = cells > 0
-                if np.any(occupied):
-                    target_o = target[occupied]
-                    keys_o = keys[occupied]
+                geometry = self.geometry_count[keys] > 0
+                geometry_count[target] += self.geometry_count[keys]
+                if np.any(geometry):
+                    target_o = target[geometry]
+                    keys_o = keys[geometry]
                     minimum[target_o] = np.minimum(
                         minimum[target_o], self.min_vertical_residual[keys_o]
                     )
@@ -428,8 +443,13 @@ class DenseSpatialEvidenceGrid:
         spread = np.zeros(count, dtype=np.float64)
         roughness = np.zeros(count, dtype=np.float64)
         support[present] = strong_count[present] / local_count[present]
-        spread[present] = np.maximum(0.0, maximum[present] - minimum[present])
-        roughness[present] = plane_sum[present] / local_count[present]
+        supported_geometry = geometry_count > 0
+        spread[supported_geometry] = np.maximum(
+            0.0, maximum[supported_geometry] - minimum[supported_geometry]
+        )
+        roughness[supported_geometry] = (
+            plane_sum[supported_geometry] / geometry_count[supported_geometry]
+        )
         return (
             support.astype(np.float32, copy=False),
             spread.astype(np.float32, copy=False),
@@ -598,7 +618,8 @@ def build_dense_spatial_evidence_grid(
             ptd_score=ptd_score,
             vertical_residual=metrics["vertical_residual"],
             plane_distance=metrics["plane_distance"],
-            valid_mask=valid,
+            valid_mask=~invalid,
+            geometry_mask=valid,
             original_class=_dimension(points, "classification", dtype=np.uint8),
             return_number=_dimension(points, "return_number", dtype=np.uint8),
             number_of_returns=_dimension(points, "number_of_returns", dtype=np.uint8),
@@ -614,12 +635,15 @@ def build_dense_spatial_evidence_grid(
     grid.finalize()
     LOGGER.info(
         "R19_DENSE_GRID_DONE processed=%d occupied=%d/%d coverage=%.4f "
-        "ram_mb=%.1f intensity_profile=%s",
+        "ram_mb=%.1f measured=%d ptd_geometry=%d ptd_fraction=%.4f intensity_profile=%s",
         grid.processed_points,
         grid.occupied_cell_count,
         grid.cell_count,
         grid.coverage_fraction,
         grid.memory_bytes / (1024.0 * 1024.0),
+        grid.measured_point_count,
+        grid.geometry_point_count,
+        grid.geometry_point_count / max(1, grid.measured_point_count),
         "yes" if grid.intensity_profile is not None else "no",
     )
     return grid
