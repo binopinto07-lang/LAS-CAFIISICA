@@ -54,6 +54,7 @@ def test_dense_grid_is_point_order_invariant():
     exact = (
         "point_count",
         "strong_count",
+        "geometry_count",
         "min_z",
         "max_z",
         "min_vertical_residual",
@@ -186,3 +187,64 @@ def test_ground_decisions_are_invariant_after_point_permutation():
 
     np.testing.assert_array_equal(decisions[0], decisions[1])
     assert ground_counts[0] == ground_counts[1]
+
+
+def test_ptd_unsupported_measured_points_keep_spatial_presence():
+    """A missing TIN facet does not make observed LiDAR returns disappear."""
+    grid = DenseSpatialEvidenceGrid.create(
+        np.array([0.0, 0.0]),
+        np.array([2.0, 2.0]),
+        spacing=0.05,
+        strong_threshold=0.68,
+        max_cells=10_000,
+    )
+    grid.accumulate(
+        x=np.array([0.10, 0.12, 0.14]),
+        y=np.array([0.10, 0.12, 0.14]),
+        z=np.array([10.0, 10.01, 10.02]),
+        ptd_score=np.array([np.nan, 0.9, np.nan]),
+        vertical_residual=np.array([np.nan, 0.01, np.nan]),
+        plane_distance=np.array([np.inf, 0.20, np.inf]),
+        valid_mask=np.ones(3, dtype=np.bool_),
+        geometry_mask=np.array([False, True, False]),
+        original_class=np.array([2, 1, 2], dtype=np.uint8),
+    )
+    assert grid.measured_point_count == 3
+    assert grid.geometry_point_count == 1
+    support, spread, roughness, present = grid.query_with_presence(
+        np.array([0.11]), np.array([0.11])
+    )
+    assert present[0]
+    np.testing.assert_allclose(support[0], 1.0 / 3.0, atol=1e-7)
+    np.testing.assert_allclose(roughness[0], 0.20, atol=1e-7)
+    assert spread[0] == 0.0
+    assert grid.query_low_z(np.array([0.11]), np.array([0.11]))[1][0]
+
+
+def test_entirely_unsupported_ptd_cell_still_has_measured_coverage():
+    grid = DenseSpatialEvidenceGrid.create(
+        np.array([0.0, 0.0]),
+        np.array([1.0, 1.0]),
+        spacing=0.05,
+        strong_threshold=0.68,
+        max_cells=10_000,
+    )
+    grid.accumulate(
+        x=np.array([0.10, 0.12]),
+        y=np.array([0.10, 0.12]),
+        z=np.array([4.0, 4.02]),
+        ptd_score=np.array([0.0, 0.0]),
+        vertical_residual=np.array([np.nan, np.nan]),
+        plane_distance=np.array([np.inf, np.inf]),
+        valid_mask=np.ones(2, dtype=np.bool_),
+        geometry_mask=np.array([False, False]),
+    )
+    support, spread, roughness, present = grid.query_with_presence(
+        np.array([0.10]), np.array([0.10])
+    )
+    assert present[0]
+    assert grid.measured_point_count == 2
+    assert grid.geometry_point_count == 0
+    assert support[0] == 0.0
+    assert spread[0] == 0.0
+    assert roughness[0] == 0.0
