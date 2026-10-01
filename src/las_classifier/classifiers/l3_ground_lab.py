@@ -12,6 +12,7 @@ from ..ground.local_geometry import normal_alignment, point_normals
 from ..ground.types import GroundEngineParams
 from ..terrain.ground_debug import (
     GroundGateDiagnostics,
+    GroundRejectReason,
     diagnose_ground_gates,
 )
 from ..terrain.ground_evidence import (
@@ -506,6 +507,7 @@ class L3GroundLabResult:
     invalid_gate_count: int = 0
     score_below_high_count: int = 0
     score_below_medium_count: int = 0
+    rejection_reason_counts: tuple[tuple[str, int], ...] = ()
 
     @property
     def point_count(self) -> int:
@@ -796,6 +798,10 @@ def run_l3_ground_lab(
     gate_diagnostics = (
         GroundGateDiagnostics.zero()
     )
+    reason_histogram = np.zeros(
+        max(int(item) for item in GroundRejectReason) + 1,
+        dtype=np.int64,
+    )
 
     scales = cloud.las.header.scales
     offsets = cloud.las.header.offsets
@@ -870,6 +876,10 @@ def run_l3_ground_lab(
                 gate_diagnostics
                 + chunk_diagnostics
             )
+            reason_histogram += np.bincount(
+                rejection_reason,
+                minlength=reason_histogram.size,
+            ).astype(np.int64, copy=False)
 
         for decision in totals:
             totals[decision] += int(
@@ -1019,6 +1029,20 @@ def run_l3_ground_lab(
         ),
     )
     if collect_gate_diagnostics:
+        exclusive_rejected = int(np.sum(reason_histogram[1:], dtype=np.int64))
+        if exclusive_rejected != non_ground_count:
+            raise RuntimeError(
+                "R19 rejection histogram mismatch: "
+                f"{exclusive_rejected} != {non_ground_count}"
+            )
+        LOGGER.info(
+            "R19_REJECT_REASONS %s",
+            " ".join(
+                f"{item.name.lower()}={reason_histogram[int(item)]:,}"
+                for item in GroundRejectReason
+                if item is not GroundRejectReason.ACCEPTED
+            ),
+        )
         LOGGER.info(
             "R19_GATES no_spatial=%d "
             "surface_fail=%d spatial_fail=%d "
@@ -1175,5 +1199,14 @@ def run_l3_ground_lab(
         ),
         score_below_medium_count=(
             gate_diagnostics.score_below_medium
+        ),
+        rejection_reason_counts=(
+            tuple(
+                (item.name.lower(), int(reason_histogram[int(item)]))
+                for item in GroundRejectReason
+                if item is not GroundRejectReason.ACCEPTED
+            )
+            if collect_gate_diagnostics
+            else ()
         ),
     )
