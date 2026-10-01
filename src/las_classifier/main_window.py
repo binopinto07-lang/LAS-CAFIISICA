@@ -561,6 +561,12 @@ class MainWindow(QMainWindow):
                 lines.append(
                     f"{label}: {getattr(result, attr, 0):,}"
                 )
+            reasons = getattr(result, "rejection_reason_counts", ())
+            if reasons:
+                lines.append("R19 EXCLUSIVE REJECTION REASONS:")
+                for reason_name, number in reasons:
+                    if number:
+                        lines.append(f"  {reason_name}: {number:,}")
 
         if hasattr(result, "source_type"):
             lines.append(
