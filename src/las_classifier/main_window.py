@@ -30,6 +30,7 @@ from .classifiers.smrf import SMRFParams
 from .cloud.classification_worker import (
     GroundEngineWorker,
     GroundExportWorker,
+    MantleExportWorker,
 )
 from .cloud.worker import CloudLoadWorker
 from .ground.types import GroundEngineParams
@@ -52,6 +53,7 @@ class MainWindow(QMainWindow):
         self._loader: CloudLoadWorker | None = None
         self._ground_worker: GroundEngineWorker | None = None
         self._export_worker: GroundExportWorker | None = None
+        self._mantle_worker: MantleExportWorker | None = None
         self._viewer_worker: ViewerPrepareWorker | None = None
         self._pending_filename: str | None = None
         self._viewer_loaded: set[str] = set()
@@ -73,6 +75,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "L3 Inverted Ground R20",
                 "L3 Dense Ground R19",
                 "L3 Ground Lab",
                 "Hybrid",
@@ -81,7 +84,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("L3 Dense Ground R19")
+        self.engine_combo.setCurrentText("L3 Inverted Ground R20")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -165,10 +168,17 @@ class MainWindow(QMainWindow):
         self.export_button = QPushButton("EXPORT GROUND ONLY")
         self.export_button.setEnabled(False)
         self.export_button.clicked.connect(self.export_ground_only)
+        self.mantle_export_button = QPushButton("EXPORT MANTO (LAZ)")
+        self.mantle_export_button.setToolTip(
+            "Separate R20 diagnostic surface: inferred cells are NOT measured Ground."
+        )
+        self.mantle_export_button.setEnabled(False)
+        self.mantle_export_button.clicked.connect(self.export_inverted_mantle)
 
         buttons.addWidget(self.ground_button)
         buttons.addWidget(self.export_button)
         form.addRow(buttons)
+        form.addRow(self.mantle_export_button)
         engine_box.setLayout(form)
 
         self.statistics_view = QPlainTextEdit()
@@ -226,6 +236,12 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(
             not active and self._ground_result is not None
         )
+        self.mantle_export_button.setEnabled(
+            not active
+            and getattr(
+                getattr(self._ground_result, "model", None), "mantle", None
+            ) is not None
+        )
         if active:
             self.statusBar().showMessage(message)
 
@@ -245,6 +261,7 @@ class MainWindow(QMainWindow):
                 self._loader,
                 self._ground_worker,
                 self._export_worker,
+                self._mantle_worker,
                 self._viewer_worker,
             )
         ):
@@ -431,6 +448,7 @@ class MainWindow(QMainWindow):
         engine: str,
     ) -> None:
         measured_l3 = engine in {
+            "L3 Inverted Ground R20",
             "L3 Dense Ground R19",
             "L3 Ground Lab",
         }
@@ -546,7 +564,8 @@ class MainWindow(QMainWindow):
             if hasattr(result, attr):
                 lines.append(f"{label}: {getattr(result, attr):,}")
 
-        if engine == "L3 Dense Ground R19":
+        if engine in {"L3 Dense Ground R19", "L3 Inverted Ground R20"}:
+            revision = "R20" if engine == "L3 Inverted Ground R20" else "R19"
             for label, attr in (
                 ("R19 no spatial evidence", "no_spatial_evidence_count"),
                 ("R19 surface gate fail", "surface_gate_fail_count"),
@@ -563,10 +582,24 @@ class MainWindow(QMainWindow):
                 )
             reasons = getattr(result, "rejection_reason_counts", ())
             if reasons:
-                lines.append("R19 EXCLUSIVE REJECTION REASONS:")
+                lines.append(f"{revision} EXCLUSIVE REJECTION REASONS:")
                 for reason_name, number in reasons:
                     if number:
                         lines.append(f"  {reason_name}: {number:,}")
+
+        if engine == "L3 Inverted Ground R20":
+            lines.extend((
+                "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
+                f"  Measured returns recovered by mantle: {result.mantle_recovered_count:,}",
+                f"  Source class2 recovered by mantle: {result.mantle_recovered_class2_count:,}",
+                f"  Observed XY cells: {result.mantle_observed_cells:,}",
+                f"  Reliable mantle cells: {result.mantle_reliable_cells:,}",
+                f"  Small inferred empty cells (diagnostic only): {result.mantle_inferred_cells:,}",
+                f"  Observed ambiguous cells: {result.mantle_ambiguous_cells:,}",
+                f"  Possible unobserved Ground under returns: {result.mantle_possible_unobserved_cells:,}",
+                "  To inspect the 2.5-D mantle use EXPORT MANTO (LAZ).",
+                "  Inferred mantle is never written by EXPORT GROUND ONLY.",
+            ))
 
         if hasattr(result, "source_type"):
             lines.append(
@@ -651,6 +684,59 @@ class MainWindow(QMainWindow):
         worker.finished.connect(self._export_finished)
         self._export_worker = worker
         worker.start()
+
+    def export_inverted_mantle(self) -> None:
+        if (
+            self._cloud is None
+            or self._ground_result is None
+            or self._mantle_worker is not None
+            or getattr(self._ground_result.model, "mantle", None) is None
+        ):
+            return
+        source = self._cloud.path
+        suggested = source.with_name(source.stem + "_R20_MANTO_DIAGNOSTICO.laz")
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export R20 mantle diagnostic (NOT observed Ground)",
+            str(suggested), "LAZ (*.laz);;LAS (*.las)",
+        )
+        if not filename:
+            return
+        output = Path(filename)
+        if output.suffix.lower() not in {".las", ".laz"}:
+            output = output.with_suffix(".laz")
+
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self._busy(True, "Exporting the separate R20 diagnostic mantle...")
+        worker = MantleExportWorker(output, self._ground_result, self)
+        worker.progress_changed.connect(self._set_progress)
+        worker.completed.connect(self._mantle_export_succeeded)
+        worker.failed.connect(self._mantle_export_failed)
+        worker.finished.connect(self._mantle_export_finished)
+        self._mantle_worker = worker
+        worker.start()
+
+    def _mantle_export_succeeded(self, path: str) -> None:
+        self.statusBar().showMessage(f"Diagnostic mantle exported: {path}")
+        QMessageBox.information(
+            self, "LAS-CAFIISICA — R20 Mantle",
+            "Independent inferred mantle exported:\\n"
+            + path
+            + "\\n\\nAll points have LAS class 0 and synthetic=1 (diagnostics ONLY)."
+            + "\\nMantleState: 1 observed/reliable, 2 unobserved gap candidate,"
+            + "\\n3 observed/ambiguous, 4 possible unobserved Ground under returns.",
+        )
+
+    def _mantle_export_failed(self, message: str) -> None:
+        self.statusBar().showMessage("Diagnostic mantle export failed")
+        QMessageBox.critical(self, "LAS-CAFIISICA — R20 Mantle", message)
+
+    def _mantle_export_finished(self) -> None:
+        worker = self._mantle_worker
+        self._mantle_worker = None
+        self._busy(False)
+        if worker is not None:
+            worker.deleteLater()
 
     def _export_succeeded(self, path: str) -> None:
         self.statusBar().showMessage(f"Ground export complete: {path}")
