@@ -21,6 +21,7 @@ from ..terrain.ground_evidence import (
     GroundEvidenceConfig,
     GroundEvidenceScorer,
     PROV_INVERTED_MANTLE,
+    PROV_GROUND_CONTINUITY,
 )
 from ..terrain.mantle_veto import (
     VETO_HEIGHT, VETO_ROOF_CANDIDATE, VETO_CANOPY_CANDIDATE,
@@ -172,6 +173,7 @@ class L3GroundLabModel:
     source_inspection: SourceInspection
     engine_name: str = "L3 Ground Lab"
     mantle: object | None = None
+    continuity: object | None = None
 
     @property
     def synthetic_fill_point_count(
@@ -386,6 +388,25 @@ class L3GroundLabModel:
             guard = getattr(self.mantle, "veto_guard", None)
             if guard is not None:
                 apply_mantle_veto(evidence, guard, x, y, z, invalid)
+                if self.continuity is not None:
+                    # All R20.1 object/height vetoes are authoritative.
+                    # Rejected roof/canopy/height points cannot re-enter via
+                    # connected cells even when their source class is 2.
+                    veto_codes = guard.classify_veto(x, y, z)
+                    candidate_3d = self.continuity.recovery_mask(
+                        x, y, z, veto_codes=veto_codes
+                    )
+                    recovered_3d = (
+                        candidate_3d
+                        & (evidence.classifications() != GROUND_CLASS)
+                        & ~invalid
+                        & (evidence.decision != int(GroundDecision.NOISE))
+                    )
+                    evidence.continuity_recovered = recovered_3d
+                    evidence.decision[recovered_3d] = int(
+                        GroundDecision.L3_GROUND_CONTINUITY_RECOVERED
+                    )
+                    evidence.provenance[recovered_3d] |= PROV_GROUND_CONTINUITY
         return evidence
 
     def rejection_reason_points(
@@ -544,6 +565,12 @@ class L3GroundLabResult:
     mantle_canopy_veto_count: int = 0
     mantle_roof_candidate_cells: int = 0
     mantle_canopy_candidate_cells: int = 0
+    continuity_recovered_count: int = 0
+    continuity_recovered_class2_count: int = 0
+    continuity_anchor_cells: int = 0
+    continuity_connected_cells: int = 0
+    continuity_expanded_cells: int = 0
+    continuity_blocked_cells: int = 0
 
     @property
     def point_count(self) -> int:
@@ -646,6 +673,7 @@ def run_l3_ground_lab(
     revision_label: str = "R18",
     collect_gate_diagnostics: bool = False,
     mantle_builder: Callable | None = None,
+    continuity_builder: Callable | None = None,
 ) -> L3GroundLabResult:
     started = perf_counter()
     requested = (
@@ -807,6 +835,11 @@ def run_l3_ground_lab(
         if mantle_builder is not None
         else None
     )
+    continuity = (
+        continuity_builder(context, mantle, progress)
+        if continuity_builder is not None
+        else None
+    )
     model = L3GroundLabModel(
         params=params,
         ptd=ptd_result.model,
@@ -819,6 +852,7 @@ def run_l3_ground_lab(
         source_inspection=inspection,
         engine_name=engine_name,
         mantle=mantle,
+        continuity=continuity,
     )
 
     totals = {
@@ -826,6 +860,7 @@ def run_l3_ground_lab(
         GroundDecision.L3_GROUND_RECOVERED_HIGH: 0,
         GroundDecision.L3_GROUND_RECOVERED_MEDIUM: 0,
         GroundDecision.L3_GROUND_MANTLE_RECOVERED: 0,
+        GroundDecision.L3_GROUND_CONTINUITY_RECOVERED: 0,
         GroundDecision.NON_GROUND_VEGETATION: 0,
         GroundDecision.NON_GROUND_OBJECT: 0,
         GroundDecision.NOISE: 0,
@@ -833,6 +868,7 @@ def run_l3_ground_lab(
     }
     class2_input = 0
     mantle_recovered_class2 = 0
+    continuity_recovered_class2 = 0
     confidence_sum = 0.0
     confidence_n = 0
     return_only = 0
@@ -954,6 +990,12 @@ def run_l3_ground_lab(
                     & (evidence.decision == int(GroundDecision.L3_GROUND_MANTLE_RECOVERED))
                 )
             )
+            continuity_recovered_class2 += int(
+                np.count_nonzero(
+                    (original_class == 2)
+                    & (evidence.decision == int(GroundDecision.L3_GROUND_CONTINUITY_RECOVERED))
+                )
+            )
 
         confidence_sum += float(
             np.sum(
@@ -1004,11 +1046,15 @@ def run_l3_ground_lab(
     mantle_recovered = totals[
         GroundDecision.L3_GROUND_MANTLE_RECOVERED
     ]
+    continuity_recovered = totals[
+        GroundDecision.L3_GROUND_CONTINUITY_RECOVERED
+    ]
     ground_count = (
         original_validated
         + recovered_high
         + recovered_medium
         + mantle_recovered
+        + continuity_recovered
     )
     non_ground_count = (
         total - ground_count
@@ -1036,7 +1082,8 @@ def run_l3_ground_lab(
             0,
             class2_input
             - original_validated
-            - mantle_recovered_class2,
+            - mantle_recovered_class2
+            - continuity_recovered_class2,
         ),
     )
     LOGGER.info(
@@ -1133,6 +1180,18 @@ def run_l3_ground_lab(
             mantle.veto_guard.roof_candidate_cell_count,
             mantle.veto_guard.canopy_candidate_cell_count,
         )
+    if continuity is not None:
+        LOGGER.info(
+            "R20_2_RECOVERY measured_points=%d source_class2=%d "
+            "anchors=%d connected_cells=%d expanded_cells=%d "
+            "veto_blocked_cells=%d synthetic=0",
+            continuity_recovered,
+            continuity_recovered_class2,
+            continuity.anchor_cell_count,
+            continuity.connected_cell_count,
+            continuity.expanded_cell_count,
+            continuity.blocked_cell_count,
+        )
     LOGGER.info(
         "SYNTHETIC_POINTS=0"
     )
@@ -1196,7 +1255,8 @@ def run_l3_ground_lab(
             0,
             class2_input
             - original_validated
-            - mantle_recovered_class2,
+            - mantle_recovered_class2
+            - continuity_recovered_class2,
         ),
         non_ground_vegetation_count=(
             totals[
@@ -1295,6 +1355,12 @@ def run_l3_ground_lab(
             mantle.veto_guard.canopy_candidate_cell_count
             if getattr(mantle, "veto_guard", None) is not None else 0
         ),
+        continuity_recovered_count=continuity_recovered,
+        continuity_recovered_class2_count=continuity_recovered_class2,
+        continuity_anchor_cells=continuity.anchor_cell_count if continuity is not None else 0,
+        continuity_connected_cells=continuity.connected_cell_count if continuity is not None else 0,
+        continuity_expanded_cells=continuity.expanded_cell_count if continuity is not None else 0,
+        continuity_blocked_cells=continuity.blocked_cell_count if continuity is not None else 0,
         rejection_reason_counts=(
             tuple(
                 (item.name.lower(), int(reason_histogram[int(item)]))
