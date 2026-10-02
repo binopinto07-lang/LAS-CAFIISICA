@@ -20,6 +20,7 @@ from ..terrain.ground_evidence import (
     GroundEvidence,
     GroundEvidenceConfig,
     GroundEvidenceScorer,
+    PROV_INVERTED_MANTLE,
 )
 from ..terrain.l3_context import (
     CoarseDetrendModel,
@@ -166,6 +167,7 @@ class L3GroundLabModel:
     scorer: GroundEvidenceScorer
     source_inspection: SourceInspection
     engine_name: str = "L3 Ground Lab"
+    mantle: object | None = None
 
     @property
     def synthetic_fill_point_count(
@@ -362,6 +364,20 @@ class L3GroundLabModel:
             source_noise_mask=None,
             spatial_presence=spatial_presence,
         )
+        if self.mantle is not None:
+            # This is measured-return recovery ONLY. Never relabel a withheld,
+            # source-synthetic, or missing point as physically observed Ground.
+            candidate = self.mantle.recovery_mask(x, y, z)
+            rejected = (
+                (evidence.decision != int(GroundDecision.L3_GROUND_ORIGINAL_VALIDATED))
+                & (evidence.decision != int(GroundDecision.L3_GROUND_RECOVERED_HIGH))
+                & (evidence.decision != int(GroundDecision.L3_GROUND_RECOVERED_MEDIUM))
+            )
+            recovered = candidate & rejected & ~invalid
+            evidence.decision[recovered] = int(
+                GroundDecision.L3_GROUND_MANTLE_RECOVERED
+            )
+            evidence.provenance[recovered] |= PROV_INVERTED_MANTLE
         return evidence
 
     def rejection_reason_points(
@@ -508,6 +524,13 @@ class L3GroundLabResult:
     score_below_high_count: int = 0
     score_below_medium_count: int = 0
     rejection_reason_counts: tuple[tuple[str, int], ...] = ()
+    mantle_recovered_count: int = 0
+    mantle_recovered_class2_count: int = 0
+    mantle_observed_cells: int = 0
+    mantle_reliable_cells: int = 0
+    mantle_inferred_cells: int = 0
+    mantle_ambiguous_cells: int = 0
+    mantle_possible_unobserved_cells: int = 0
 
     @property
     def point_count(self) -> int:
@@ -609,6 +632,7 @@ def run_l3_ground_lab(
     engine_name: str = "L3 Ground Lab",
     revision_label: str = "R18",
     collect_gate_diagnostics: bool = False,
+    mantle_builder: Callable | None = None,
 ) -> L3GroundLabResult:
     started = perf_counter()
     requested = (
@@ -765,6 +789,11 @@ def run_l3_ground_lab(
             ),
         ),
     )
+    mantle = (
+        mantle_builder(context, progress)
+        if mantle_builder is not None
+        else None
+    )
     model = L3GroundLabModel(
         params=params,
         ptd=ptd_result.model,
@@ -776,18 +805,21 @@ def run_l3_ground_lab(
         ),
         source_inspection=inspection,
         engine_name=engine_name,
+        mantle=mantle,
     )
 
     totals = {
         GroundDecision.L3_GROUND_ORIGINAL_VALIDATED: 0,
         GroundDecision.L3_GROUND_RECOVERED_HIGH: 0,
         GroundDecision.L3_GROUND_RECOVERED_MEDIUM: 0,
+        GroundDecision.L3_GROUND_MANTLE_RECOVERED: 0,
         GroundDecision.NON_GROUND_VEGETATION: 0,
         GroundDecision.NON_GROUND_OBJECT: 0,
         GroundDecision.NOISE: 0,
         GroundDecision.UNKNOWN: 0,
     }
     class2_input = 0
+    mantle_recovered_class2 = 0
     confidence_sum = 0.0
     confidence_n = 0
     return_only = 0
@@ -898,6 +930,12 @@ def run_l3_ground_lab(
                     original_class == 2
                 )
             )
+            mantle_recovered_class2 += int(
+                np.count_nonzero(
+                    (original_class == 2)
+                    & (evidence.decision == int(GroundDecision.L3_GROUND_MANTLE_RECOVERED))
+                )
+            )
 
         confidence_sum += float(
             np.sum(
@@ -945,10 +983,14 @@ def run_l3_ground_lab(
     recovered_medium = totals[
         GroundDecision.L3_GROUND_RECOVERED_MEDIUM
     ]
+    mantle_recovered = totals[
+        GroundDecision.L3_GROUND_MANTLE_RECOVERED
+    ]
     ground_count = (
         original_validated
         + recovered_high
         + recovered_medium
+        + mantle_recovered
     )
     non_ground_count = (
         total - ground_count
@@ -975,7 +1017,8 @@ def run_l3_ground_lab(
         max(
             0,
             class2_input
-            - original_validated,
+            - original_validated
+            - mantle_recovered_class2,
         ),
     )
     LOGGER.info(
@@ -1121,7 +1164,8 @@ def run_l3_ground_lab(
         rejected_class2_count=max(
             0,
             class2_input
-            - original_validated,
+            - original_validated
+            - mantle_recovered_class2,
         ),
         non_ground_vegetation_count=(
             totals[
@@ -1199,6 +1243,15 @@ def run_l3_ground_lab(
         ),
         score_below_medium_count=(
             gate_diagnostics.score_below_medium
+        ),
+        mantle_recovered_count=mantle_recovered,
+        mantle_recovered_class2_count=mantle_recovered_class2,
+        mantle_observed_cells=mantle.observed_cell_count if mantle is not None else 0,
+        mantle_reliable_cells=mantle.reliable_cell_count if mantle is not None else 0,
+        mantle_inferred_cells=mantle.inferred_cell_count if mantle is not None else 0,
+        mantle_ambiguous_cells=mantle.ambiguous_cell_count if mantle is not None else 0,
+        mantle_possible_unobserved_cells=(
+            mantle.possible_no_ground_observation_count if mantle is not None else 0
         ),
         rejection_reason_counts=(
             tuple(
