@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "L3 Ground Continuity R20.2",
                 "L3 Inverted Ground R20.1",
                 "L3 Inverted Ground R20",
                 "L3 Dense Ground R19",
@@ -85,7 +86,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("L3 Inverted Ground R20.1")
+        self.engine_combo.setCurrentText("L3 Ground Continuity R20.2")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -462,6 +463,7 @@ class MainWindow(QMainWindow):
         engine: str,
     ) -> None:
         measured_l3 = engine in {
+            "L3 Ground Continuity R20.2",
             "L3 Inverted Ground R20.1",
             "L3 Inverted Ground R20",
             "L3 Dense Ground R19",
@@ -529,7 +531,8 @@ class MainWindow(QMainWindow):
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
+            "MANTO R20.2" if getattr(result.model, "continuity", None) is not None
+            else "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
             else "MANTO R20",
         )
         engine = getattr(result, "engine_name", "SMRF Legacy")
@@ -589,9 +592,11 @@ class MainWindow(QMainWindow):
             "L3 Dense Ground R19",
             "L3 Inverted Ground R20",
             "L3 Inverted Ground R20.1",
+            "L3 Ground Continuity R20.2",
         }:
             revision = (
-                "R20.1" if engine == "L3 Inverted Ground R20.1"
+                "R20.2" if engine == "L3 Ground Continuity R20.2"
+                else "R20.1" if engine == "L3 Inverted Ground R20.1"
                 else "R20" if engine == "L3 Inverted Ground R20" else "R19"
             )
             for label, attr in (
@@ -615,7 +620,7 @@ class MainWindow(QMainWindow):
                     if number:
                         lines.append(f"  {reason_name}: {number:,}")
 
-        if engine == "L3 Inverted Ground R20.1":
+        if engine in {"L3 Inverted Ground R20.1", "L3 Ground Continuity R20.2"}:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
                 f"  Vetoed above mantle: {result.mantle_height_veto_count:,}",
@@ -626,7 +631,23 @@ class MainWindow(QMainWindow):
                 "  These are geometric candidates, NOT confirmed building/tree labels.",
             ))
 
-        if engine in {"L3 Inverted Ground R20", "L3 Inverted Ground R20.1"}:
+        if engine == "L3 Ground Continuity R20.2":
+            lines.extend((
+                "R20.2 MEASURED GROUND CONTINUITY:",
+                f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
+                f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
+                f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
+                f"  Connected measured XY cells: {result.continuity_connected_cells:,}",
+                f"  Additional linked XY cells: {result.continuity_expanded_cells:,}",
+                f"  Roof/canopy cells blocked: {result.continuity_blocked_cells:,}",
+                "  No unobserved cells or artificial Ground are accepted.",
+            ))
+
+        if engine in {
+            "L3 Inverted Ground R20",
+            "L3 Inverted Ground R20.1",
+            "L3 Ground Continuity R20.2",
+        }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
                 f"  Measured returns recovered by mantle: {result.mantle_recovered_count:,}",
