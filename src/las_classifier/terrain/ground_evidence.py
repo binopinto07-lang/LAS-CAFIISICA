@@ -31,6 +31,7 @@ PROV_DETRENDED = np.uint16(1 << 6)
 PROV_INTENSITY = np.uint16(1 << 7)
 PROV_CLOTH_AUX = np.uint16(1 << 8)
 PROV_INVERTED_MANTLE = np.uint16(1 << 9)
+PROV_MANTLE_VETO = np.uint16(1 << 10)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +110,7 @@ class GroundEvidence:
     provenance: np.ndarray
     spatial_presence: np.ndarray | None = None
     rejection_reason: np.ndarray | None = None
+    mantle_veto_code: np.ndarray | None = None
 
     def classifications(self) -> np.ndarray:
         classes = np.full(
