@@ -144,7 +144,8 @@
   function applyViewMode() {
     for (const [key, entry] of state.clouds.entries()) {
       if (state.viewMode === "both") {
-        entry.pointcloud.visible = true;
+        // Do not overlay the *inferred* mantle onto measured Ground by default.
+        entry.pointcloud.visible = key === "original" || key === "classified";
       } else {
         entry.pointcloud.visible =
           key === state.viewMode;
@@ -241,7 +242,7 @@
 
   function setViewMode(mode) {
     if (
-      !["original", "classified", "both"].includes(
+      !["original", "classified", "mantle", "both"].includes(
         mode
       )
     ) {
@@ -251,9 +252,12 @@
     applyViewMode();
     if (mode === "classified") {
       setMaterialMode("classification");
+    } else if (mode === "mantle") {
+      // MantleState is color-coded through RGB; LAS class 0 is deliberate.
+      setMaterialMode("rgb");
     }
 
-    // Switching Original / Final Ground / Compare must never move the camera.
+    // Switching Original / Final Ground / Compare / Manto never moves the camera.
     // The same eye position, target, rotation and zoom are kept so differences
     // are inspected at exactly the same location.
   }
