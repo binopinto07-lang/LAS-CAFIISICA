@@ -36,7 +36,7 @@ Recuperar **retornos físicos medidos** que foram rejeitados pelo TIN/PTD em tal
 2. Abrir `START_BUILD_MANAGER.bat` (Local Build Manager integrado V0.1.11).
 3. Executar **BUILD + TESTES**; verificar `tests/test_r20_inverted_mantle.py` e `tests/test_r20_ground_decision.py`.
 4. Abrir `cloud0.las`. Escolher `L3 Inverted Ground R20`, Balanced, Mountain / Talude, Auto detect; sintético fica desativado.
-5. Comparar ORIGINAL, R19.1 e R20 a partir da mesma câmara. Guardar estatísticas e linhas `R20_INVERTED_MANTLE` / `R19_REJECT_REASONS` (o prefixo de log mantém-se por compatibilidade).
+5. Comparar ORIGINAL, R19.1 e R20 a partir da mesma câmara. Guardar estatísticas e linhas `R20_INVERTED_MANTLE` / `R20_REJECT_REASONS` / `R20_GATES`.
 6. Na viewport clicar **MANTO R20** para gerar, quando solicitado, a nuvem Potree colorida; esta vista é independente e mantém a câmara. O modo COMPARAR sobrepõe apenas ORIGINAL e FINAL GROUND, nunca o manto inferido.
 7. Opcionalmente exportar `_R20_MANTO_DIAGNOSTICO.laz` para inspeção externa; escolher RGB e ler a dimensão extra `MantleState`.
 8. Validar separadamente vegetação, socalcos, cristas/pés, zonas sem pontos, densidade e desempenho.
