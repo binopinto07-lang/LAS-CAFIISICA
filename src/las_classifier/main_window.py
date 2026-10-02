@@ -526,8 +526,11 @@ class MainWindow(QMainWindow):
 
     def _ground_succeeded(self, result) -> None:
         self._ground_result = result
+        mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
-            getattr(result.model, "mantle", None) is not None
+            mantle is not None,
+            "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
+            else "MANTO R20",
         )
         engine = getattr(result, "engine_name", "SMRF Legacy")
         lines = [
@@ -760,7 +763,8 @@ class MainWindow(QMainWindow):
             + path
             + "\n\nAll points have LAS class 0 and synthetic=1 (diagnostics ONLY)."
             + "\nMantleState: 1 observed/reliable, 2 unobserved gap candidate,"
-            + "\n3 observed/ambiguous, 4 possible unobserved Ground under returns.",
+            + "\n3 observed/ambiguous, 4 possible unobserved Ground under returns."
+            + "\nR20.1: 5 elevated roof candidate (red), 6 canopy candidate (orange).",
         )
 
     def _mantle_export_failed(self, message: str) -> None:
