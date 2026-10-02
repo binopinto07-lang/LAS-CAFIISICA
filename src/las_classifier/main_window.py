@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
         left.setMinimumWidth(410)
 
         self.viewer = PointCloudViewer(self)
+        self.viewer.mantle_requested.connect(self._request_mantle_view)
 
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left)
@@ -324,21 +325,33 @@ class MainWindow(QMainWindow):
         if self._cloud is not None:
             self._prepare_viewer("original")
 
+    def _request_mantle_view(self) -> None:
+        if (
+            self._ground_result is None
+            or getattr(self._ground_result.model, "mantle", None) is None
+        ):
+            return
+        self._prepare_viewer("mantle")
+
     def _prepare_viewer(self, kind: str) -> None:
         if self._cloud is None or self._viewer_worker is not None:
             return
-        if kind == "classified" and self._ground_result is None:
+        if kind in {"classified", "mantle"} and self._ground_result is None:
             return
 
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        label = "original" if kind == "original" else "final ground"
+        label = {
+            "original": "original",
+            "classified": "final ground",
+            "mantle": "inverted Ground mantle (diagnostic)",
+        }.get(kind, kind)
         self._busy(True, f"Preparing {label} 3D viewport...")
 
         worker = ViewerPrepareWorker(
             kind,
             self._cloud.path,
-            self._ground_result if kind == "classified" else None,
+            self._ground_result if kind != "original" else None,
             self,
         )
         worker.progress_changed.connect(self._set_progress)
@@ -511,6 +524,9 @@ class MainWindow(QMainWindow):
 
     def _ground_succeeded(self, result) -> None:
         self._ground_result = result
+        self.viewer.set_mantle_available(
+            getattr(result.model, "mantle", None) is not None
+        )
         engine = getattr(result, "engine_name", "SMRF Legacy")
         lines = [
             "",
