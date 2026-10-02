@@ -22,6 +22,8 @@ STATE_OBSERVED_RELIABLE = np.uint8(1)
 STATE_INFERRED_EMPTY = np.uint8(2)
 STATE_OBSERVED_AMBIGUOUS = np.uint8(3)
 STATE_POSSIBLE_UNOBSERVED = np.uint8(4)
+STATE_ROOF_CANDIDATE = np.uint8(5)
+STATE_CANOPY_CANDIDATE = np.uint8(6)
 ProgressCallback = Callable[[int, str], None]
 
 
@@ -31,6 +33,11 @@ def mantle_state_grid(mantle: InvertedGroundMantle) -> np.ndarray:
     state[mantle.inferred] = STATE_INFERRED_EMPTY
     state[mantle.ambiguous] = STATE_OBSERVED_AMBIGUOUS
     state[mantle.possible_no_ground_observation] = STATE_POSSIBLE_UNOBSERVED
+    guard = getattr(mantle, "veto_guard", None)
+    if guard is not None:
+        # R20.1 warning classes, not observed Ground; preserve R20 geometry.
+        state[guard.canopy_candidate] = STATE_CANOPY_CANDIDATE
+        state[guard.roof_candidate] = STATE_ROOF_CANDIDATE
     return state
 
 
@@ -74,6 +81,8 @@ def export_mantle_diagnostic(
             [9000, 19000, 59000],    # 2 interpolated uncertainty: blue
             [30000, 30000, 30000],  # 3 ambiguous measured: grey
             [49000, 20000, 49000],  # 4 suspected unobserved ground: purple
+            [65535, 11000, 9000],   # 5 R20.1 elevated roof-like island: red
+            [65535, 40000, 5000],   # 6 R20.1 elevated canopy-like island: orange
         ],
         dtype=np.uint16,
     )
