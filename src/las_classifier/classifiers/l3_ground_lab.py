@@ -1072,14 +1072,16 @@ def run_l3_ground_lab(
         ),
     )
     if collect_gate_diagnostics:
+        diagnostic_revision = "R20" if mantle is not None else "R19"
         exclusive_rejected = int(np.sum(reason_histogram[1:], dtype=np.int64))
         if exclusive_rejected != non_ground_count:
             raise RuntimeError(
-                "R19 rejection histogram mismatch: "
+                f"{diagnostic_revision} rejection histogram mismatch: "
                 f"{exclusive_rejected} != {non_ground_count}"
             )
         LOGGER.info(
-            "R19_REJECT_REASONS %s",
+            "%s_REJECT_REASONS %s",
+            diagnostic_revision,
             " ".join(
                 f"{item.name.lower()}={reason_histogram[int(item)]:,}"
                 for item in GroundRejectReason
@@ -1087,11 +1089,12 @@ def run_l3_ground_lab(
             ),
         )
         LOGGER.info(
-            "R19_GATES no_spatial=%d "
+            "%s_GATES no_spatial=%d "
             "surface_fail=%d spatial_fail=%d "
             "vegetation=%d object_roughness=%d "
             "normal_mismatch=%d invalid=%d "
             "below_high=%d below_medium=%d",
+            diagnostic_revision,
             gate_diagnostics.no_spatial_evidence,
             gate_diagnostics.surface_gate_fail,
             gate_diagnostics.spatial_gate_fail,
