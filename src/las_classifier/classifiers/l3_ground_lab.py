@@ -21,12 +21,12 @@ from ..terrain.ground_evidence import (
     GroundEvidenceConfig,
     GroundEvidenceScorer,
     PROV_INVERTED_MANTLE,
-    PROV_GROUND_CONTINUITY,
 )
 from ..terrain.mantle_veto import (
     VETO_HEIGHT, VETO_ROOF_CANDIDATE, VETO_CANOPY_CANDIDATE,
     apply_mantle_veto,
 )
+from ..terrain.ground_continuity import apply_continuity_recovery
 from ..terrain.l3_context import (
     CoarseDetrendModel,
     L3SpatialContext,
@@ -389,24 +389,9 @@ class L3GroundLabModel:
             if guard is not None:
                 apply_mantle_veto(evidence, guard, x, y, z, invalid)
                 if self.continuity is not None:
-                    # All R20.1 object/height vetoes are authoritative.
-                    # Rejected roof/canopy/height points cannot re-enter via
-                    # connected cells even when their source class is 2.
-                    veto_codes = guard.classify_veto(x, y, z)
-                    candidate_3d = self.continuity.recovery_mask(
-                        x, y, z, veto_codes=veto_codes
+                    apply_continuity_recovery(
+                        evidence, self.continuity, guard, x, y, z, invalid
                     )
-                    recovered_3d = (
-                        candidate_3d
-                        & (evidence.classifications() != GROUND_CLASS)
-                        & ~invalid
-                        & (evidence.decision != int(GroundDecision.NOISE))
-                    )
-                    evidence.continuity_recovered = recovered_3d
-                    evidence.decision[recovered_3d] = int(
-                        GroundDecision.L3_GROUND_CONTINUITY_RECOVERED
-                    )
-                    evidence.provenance[recovered_3d] |= PROV_GROUND_CONTINUITY
         return evidence
 
     def rejection_reason_points(
