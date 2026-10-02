@@ -255,3 +255,41 @@ def build_mantle_veto(
         directional_lower_count=dirs,
         config=cfg,
     )
+
+
+def apply_mantle_veto(
+    evidence,
+    guard: MantleVeto,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    invalid: np.ndarray,
+) -> np.ndarray:
+    """Veto already-accepted Ground, including mistaken PTD/class2 decisions.
+
+    The return codes count only actual changes to accepted decisions.
+    Rejected/invalid points are not relabelled. Recovery (R20) runs BEFORE
+    this method so an elevated roof cannot be recovered again.
+    """
+    from .ground_evidence import (
+        GroundDecision,
+        PROV_MANTLE_VETO,
+    )
+
+    proposed = guard.classify_veto(x, y, z)
+    invalid = np.asarray(invalid, dtype=np.bool_)
+    if invalid.shape != proposed.shape:
+        raise ValueError("R20.1 invalid-mask shape mismatch")
+    accepted = evidence.classifications() == 2
+    applied = (proposed != VETO_NONE) & accepted & ~invalid
+    actual = np.where(applied, proposed, VETO_NONE).astype(np.uint8)
+    evidence.mantle_veto_code = actual
+
+    roof = actual == VETO_ROOF_CANDIDATE
+    canopy = actual == VETO_CANOPY_CANDIDATE
+    high = actual == VETO_HEIGHT
+    evidence.decision[roof | high] = int(GroundDecision.NON_GROUND_OBJECT)
+    evidence.decision[canopy] = int(GroundDecision.NON_GROUND_VEGETATION)
+    evidence.provenance[applied] |= PROV_MANTLE_VETO
+    evidence.score[applied] = np.minimum(evidence.score[applied], np.float32(0.20))
+    return actual
