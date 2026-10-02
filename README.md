@@ -58,3 +58,8 @@ See [R20_LEIA_ME.md](R20_LEIA_ME.md) for the isolated R20 engine, separate infer
 ## R20.1 — Mantle-guided object veto (experimental)
 
 See [R20_1_LEIA_ME.md](R20_1_LEIA_ME.md). The separate branch `r20-1-mantle-veto` preserves the R20 cloth and adds a post-classification elevated-object veto for roof/canopy candidates. The integrated `START_BUILD_MANAGER.bat` selects the authoritative local profile revision 38.
+
+
+## R20.2 — Ground Continuity Recovery (experimental)
+
+See [R20_2_LEIA_ME.md](R20_2_LEIA_ME.md). Branch `r20-2-continuity-recovery` preserves the R20/R20.1 engines, the original inverted cloth, roof/canopy veto, EPSG:3763, viewer camera and measured-only Ground export. Open `START_BUILD_MANAGER.bat` and run BUILD + TESTES using integrated profile revision 39.
