@@ -73,6 +73,7 @@ def diagnose_ground_gates(
         (decision == int(GroundDecision.L3_GROUND_ORIGINAL_VALIDATED))
         | (decision == int(GroundDecision.L3_GROUND_RECOVERED_HIGH))
         | (decision == int(GroundDecision.L3_GROUND_RECOVERED_MEDIUM))
+        | (decision == int(GroundDecision.L3_GROUND_MANTLE_RECOVERED))
     )
     rejected = ~accepted
     invalid = decision == int(GroundDecision.NOISE)
