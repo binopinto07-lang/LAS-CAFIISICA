@@ -48,3 +48,8 @@ LAS_CAFIISICA_GROUND_V2_2026_09_R3
 ```
 
 O projeto continua sem depender de GitHub Actions.
+
+
+## Experimental R20 inverted Ground mantle
+
+See [R20_LEIA_ME.md](R20_LEIA_ME.md) for the isolated R20 engine, separate inferred-surface diagnostic LAZ, source distinctions and mandatory field validation. Use branch `r20-inverted-mantle` and the integrated `START_BUILD_MANAGER.bat`.

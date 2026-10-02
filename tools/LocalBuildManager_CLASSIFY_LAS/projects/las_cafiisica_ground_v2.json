@@ -1,8 +1,8 @@
 {
   "id": "las_cafiisica_ground_v2",
-  "name": "LAS-CAFIISICA — GROUND ENGINE V2",
+  "name": "LAS-CAFIISICA — R20 INVERTED MANTLE",
   "repo_url": "https://github.com/binopinto07-lang/LAS-CAFIISICA.git",
-  "branch": "ground-engine-v2",
+  "branch": "r20-inverted-mantle",
   "python_version": "3.12",
   "dist_dir_name": "LAS_CAFIISICA",
   "checks": [
@@ -33,7 +33,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R19_1'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -133,7 +133,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R19_1'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -229,7 +229,7 @@
     ]
   },
   "release": {},
-  "config_revision": 36,
+  "config_revision": 37,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -309,11 +309,17 @@
     "tools/LocalBuildManager_CLASSIFY_LAS/run.py",
     "tools/LocalBuildManager_CLASSIFY_LAS/app/ui/main_window.py",
     "tools/LocalBuildManager_CLASSIFY_LAS/projects/las_cafiisica_ground_v2.json",
-    "tests/test_import_order.py"
+    "tests/test_import_order.py",
+    "src/las_classifier/terrain/inverted_mantle.py",
+    "src/las_classifier/terrain/mantle_export.py",
+    "src/las_classifier/classifiers/l3_inverted_ground.py",
+    "tests/test_r20_inverted_mantle.py",
+    "tests/test_r20_ground_decision.py",
+    "R20_LEIA_ME.md"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_GROUND_V2_2026_10_R19_1"
+    "value": "LAS_CAFIISICA_GROUND_V2_2026_10_R20"
   },
   "auto_bootstrap_python": true
 }
