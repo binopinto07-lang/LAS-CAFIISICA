@@ -736,11 +736,11 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Diagnostic mantle exported: {path}")
         QMessageBox.information(
             self, "LAS-CAFIISICA — R20 Mantle",
-            "Independent inferred mantle exported:\\n"
+            "Independent inferred mantle exported:\n"
             + path
-            + "\\n\\nAll points have LAS class 0 and synthetic=1 (diagnostics ONLY)."
-            + "\\nMantleState: 1 observed/reliable, 2 unobserved gap candidate,"
-            + "\\n3 observed/ambiguous, 4 possible unobserved Ground under returns.",
+            + "\n\nAll points have LAS class 0 and synthetic=1 (diagnostics ONLY)."
+            + "\nMantleState: 1 observed/reliable, 2 unobserved gap candidate,"
+            + "\n3 observed/ambiguous, 4 possible unobserved Ground under returns.",
         )
 
     def _mantle_export_failed(self, message: str) -> None:
