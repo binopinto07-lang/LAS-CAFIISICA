@@ -19,6 +19,7 @@ class GroundDecision(IntEnum):
     NON_GROUND_OBJECT = 5
     NOISE = 6
     L3_GROUND_MANTLE_RECOVERED = 7
+    L3_GROUND_CONTINUITY_RECOVERED = 8
 
 
 PROV_PTD_SURFACE = np.uint16(1 << 0)
@@ -32,6 +33,7 @@ PROV_INTENSITY = np.uint16(1 << 7)
 PROV_CLOTH_AUX = np.uint16(1 << 8)
 PROV_INVERTED_MANTLE = np.uint16(1 << 9)
 PROV_MANTLE_VETO = np.uint16(1 << 10)
+PROV_GROUND_CONTINUITY = np.uint16(1 << 11)
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +113,7 @@ class GroundEvidence:
     spatial_presence: np.ndarray | None = None
     rejection_reason: np.ndarray | None = None
     mantle_veto_code: np.ndarray | None = None
+    continuity_recovered: np.ndarray | None = None
 
     def classifications(self) -> np.ndarray:
         classes = np.full(
@@ -123,6 +126,7 @@ class GroundEvidence:
             | (self.decision == GroundDecision.L3_GROUND_RECOVERED_HIGH)
             | (self.decision == GroundDecision.L3_GROUND_RECOVERED_MEDIUM)
             | (self.decision == GroundDecision.L3_GROUND_MANTLE_RECOVERED)
+            | (self.decision == GroundDecision.L3_GROUND_CONTINUITY_RECOVERED)
         )
         classes[ground] = GROUND_CLASS
         return classes
@@ -149,6 +153,9 @@ class GroundEvidence:
         codes[
             self.decision == GroundDecision.L3_GROUND_MANTLE_RECOVERED
         ] = 5  # R20: physically measured return recovered by mantle geometry
+        codes[
+            self.decision == GroundDecision.L3_GROUND_CONTINUITY_RECOVERED
+        ] = 6  # R20.2 measured-only 3D continuity; never synthetic
         return codes
 
 
