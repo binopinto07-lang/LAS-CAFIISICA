@@ -20,6 +20,9 @@ class GroundRejectReason(IntEnum):
     SCORE_BELOW_MEDIUM = 8
     SCORE_BELOW_HIGH = 9
     OTHER_REJECTED = 10
+    MANTLE_HEIGHT_VETO = 11
+    ROOF_CANDIDATE_VETO = 12
+    CANOPY_CANDIDATE_VETO = 13
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +99,14 @@ def diagnose_ground_gates(
         alignment = np.asarray(alignment, dtype=np.float64)
         normal_mismatch = np.isfinite(alignment) & (alignment < 0.45)
 
+    veto = getattr(evidence, "mantle_veto_code", None)
+    if veto is None:
+        veto = np.zeros(count, dtype=np.uint8)
+    else:
+        veto = np.asarray(veto, dtype=np.uint8)
+        if veto.shape[0] != count:
+            raise ValueError("R20.1 veto length mismatch")
+
     below_high = score < config.high_threshold
     below_medium = score < config.medium_threshold
 
@@ -120,6 +131,9 @@ def diagnose_ground_gates(
     unresolved = rejected.copy()
     for mask, code in (
         (invalid, GroundRejectReason.INVALID),
+        (veto == 2, GroundRejectReason.ROOF_CANDIDATE_VETO),
+        (veto == 3, GroundRejectReason.CANOPY_CANDIDATE_VETO),
+        (veto == 1, GroundRejectReason.MANTLE_HEIGHT_VETO),
         (vegetation, GroundRejectReason.VEGETATION_GATE),
         (no_spatial, GroundRejectReason.NO_SPATIAL_EVIDENCE),
         (surface_fail, GroundRejectReason.SURFACE_GATE_FAIL),
