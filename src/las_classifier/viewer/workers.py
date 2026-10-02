@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from .converter import prepare_classified, prepare_original
+from .converter import prepare_classified, prepare_mantle, prepare_original
 
 
 class ViewerPrepareWorker(QThread):
@@ -20,7 +20,7 @@ class ViewerPrepareWorker(QThread):
         parent=None,
     ) -> None:
         super().__init__(parent)
-        if kind not in {"original", "classified"}:
+        if kind not in {"original", "classified", "mantle"}:
             raise ValueError(f"Unsupported viewer kind: {kind}")
         self.kind = kind
         self.source_path = source_path
@@ -37,6 +37,12 @@ class ViewerPrepareWorker(QThread):
                     callback,
                 )
                 title = self.source_path.name + " — Original"
+                classified = False
+            elif self.kind == "mantle":
+                if self.result is None:
+                    raise RuntimeError("R20 mantle viewer requires a ground result")
+                dataset = prepare_mantle(self.source_path, self.result, callback)
+                title = self.source_path.name + " — R20 MANTO (INFERIDO / NAO MEDIDO)"
                 classified = False
             else:
                 if self.result is None:
