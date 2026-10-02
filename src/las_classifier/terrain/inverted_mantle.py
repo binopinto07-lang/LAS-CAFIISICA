@@ -216,7 +216,7 @@ def build_inverted_ground_mantle(
     # Bounded sag at a measured cell; missing cells remain interpolation
     # candidates rather than being mislabeled observed points.
     surface[observed] = np.maximum(
-        surface[observed], robust_lower[observed] - 0.12
+        surface[observed], robust_lower[observed] - 0.04
     )
     slope_y, slope_x = np.gradient(surface, grid.cell_size)
     slope_x = np.clip(slope_x, -3.0, 3.0).astype(np.float32)
