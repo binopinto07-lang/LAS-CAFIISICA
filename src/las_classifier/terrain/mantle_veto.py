@@ -159,12 +159,9 @@ class MantleVeto:
         # Priority: roof island (including when cloth sits ON the roof);
         # canopy island; elevated return above a reliable ground mantle.
         roof_hit = roof
-        canopy_hit = ~roof_hit & (
-            canopy & (
-                (normal_above > -0.15)
-                | (normal_above > self.config.canopy_above_normal_m)
-            )
-        )
+        # Candidate canopy is an elevated island with >=3 lower directions
+        # and large intra-cell spread. Tiny below-envelope outliers are spared.
+        canopy_hit = ~roof_hit & canopy & (normal_above > -0.15)
         height_hit = (
             ~roof_hit & ~canopy_hit & reliable
             & (normal_above > self.config.max_above_normal_m)
@@ -214,13 +211,13 @@ def build_mantle_veto(
         distance_cells, nearest = distance_transform_edt(
             ~roof_core, return_indices=True
         )
-        roof_z = mantle.surface[tuple(nearest)]
+        roof_z = lower[tuple(nearest)]  # Measured footprint, not sagging cloth
         roof |= (
             observed
             & (cell_count >= 3)
             & (spread <= 0.90)
             & ((distance_cells * grid.cell_size) <= cfg.roof_extension_m)
-            & (np.abs(mantle.surface - roof_z) <= cfg.roof_max_plateau_delta_m)
+            & (np.abs(lower - roof_z) <= cfg.roof_max_plateau_delta_m)
         )
     # Dense canopy with possible local ground returns is resolved per-point
     # by the height gate, NOT rejected wholesale. A canopy-only island may
