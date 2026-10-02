@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, Signal
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
@@ -39,6 +39,8 @@ class LoggingWebPage(QWebEnginePage):
 
 
 class PointCloudViewer(QWidget):
+    mantle_requested = Signal()
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.server = ViewerServer()
@@ -48,10 +50,13 @@ class PointCloudViewer(QWidget):
         self._loaded = {
             "original": False,
             "classified": False,
+            "mantle": False,
         }
+        self._mantle_available = False
 
         self.original_button = QPushButton("ORIGINAL")
         self.classified_button = QPushButton("FINAL GROUND")
+        self.mantle_button = QPushButton("MANTO R20")
         self.both_button = QPushButton("COMPARAR")
         self.fit_button = QPushButton("ENQUADRAR")
         self.rgb_button = QPushButton("RGB")
@@ -61,6 +66,7 @@ class PointCloudViewer(QWidget):
         self.original_button.setEnabled(False)
         self.classified_button.setEnabled(False)
         self.both_button.setEnabled(False)
+        self.mantle_button.setEnabled(False)
 
         self.original_button.clicked.connect(
             lambda: self.set_view_mode("original")
@@ -71,6 +77,7 @@ class PointCloudViewer(QWidget):
         self.both_button.clicked.connect(
             lambda: self.set_view_mode("both")
         )
+        self.mantle_button.clicked.connect(self._request_mantle_view)
         self.fit_button.clicked.connect(
             lambda: self._run_js("window.LASViewer.fit();")
         )
@@ -89,6 +96,7 @@ class PointCloudViewer(QWidget):
         toolbar.addWidget(self.original_button)
         toolbar.addWidget(self.classified_button)
         toolbar.addWidget(self.both_button)
+        toolbar.addWidget(self.mantle_button)
         toolbar.addStretch(1)
         toolbar.addWidget(self.fit_button)
         toolbar.addWidget(self.rgb_button)
@@ -123,6 +131,18 @@ class PointCloudViewer(QWidget):
         else:
             self._pending_scripts.append(script)
 
+    def set_mantle_available(self, available: bool) -> None:
+        self._mantle_available = bool(available)
+        self.mantle_button.setEnabled(self._mantle_available)
+
+    def _request_mantle_view(self) -> None:
+        if not self._mantle_available:
+            return
+        if self._loaded["mantle"]:
+            self.set_view_mode("mantle")
+        else:
+            self.mantle_requested.emit()
+
     def load_cloud(
         self,
         key: str,
@@ -145,6 +165,7 @@ class PointCloudViewer(QWidget):
             self._loaded["original"]
             and self._loaded["classified"]
         )
+        self.mantle_button.setEnabled(self._mantle_available)
         script = (
             "window.LASViewer.loadCloud("
             + json.dumps(key)
@@ -161,7 +182,7 @@ class PointCloudViewer(QWidget):
         self._run_js(script)
 
     def set_view_mode(self, mode: str) -> None:
-        if mode not in {"original", "classified", "both"}:
+        if mode not in {"original", "classified", "mantle", "both"}:
             return
         self._run_js(
             "window.LASViewer.setViewMode("
@@ -182,7 +203,10 @@ class PointCloudViewer(QWidget):
         self._loaded = {
             "original": False,
             "classified": False,
+            "mantle": False,
         }
+        self._mantle_available = False
+        self.mantle_button.setEnabled(False)
         self.original_button.setEnabled(False)
         self.classified_button.setEnabled(False)
         self.both_button.setEnabled(False)
