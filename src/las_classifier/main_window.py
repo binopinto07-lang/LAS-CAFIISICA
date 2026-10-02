@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "L3 Inverted Ground R20.1",
                 "L3 Inverted Ground R20",
                 "L3 Dense Ground R19",
                 "L3 Ground Lab",
@@ -84,7 +85,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("L3 Inverted Ground R20")
+        self.engine_combo.setCurrentText("L3 Inverted Ground R20.1")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -461,6 +462,7 @@ class MainWindow(QMainWindow):
         engine: str,
     ) -> None:
         measured_l3 = engine in {
+            "L3 Inverted Ground R20.1",
             "L3 Inverted Ground R20",
             "L3 Dense Ground R19",
             "L3 Ground Lab",
@@ -580,8 +582,15 @@ class MainWindow(QMainWindow):
             if hasattr(result, attr):
                 lines.append(f"{label}: {getattr(result, attr):,}")
 
-        if engine in {"L3 Dense Ground R19", "L3 Inverted Ground R20"}:
-            revision = "R20" if engine == "L3 Inverted Ground R20" else "R19"
+        if engine in {
+            "L3 Dense Ground R19",
+            "L3 Inverted Ground R20",
+            "L3 Inverted Ground R20.1",
+        }:
+            revision = (
+                "R20.1" if engine == "L3 Inverted Ground R20.1"
+                else "R20" if engine == "L3 Inverted Ground R20" else "R19"
+            )
             for label, attr in (
                 ("R19 no spatial evidence", "no_spatial_evidence_count"),
                 ("R19 surface gate fail", "surface_gate_fail_count"),
@@ -603,7 +612,18 @@ class MainWindow(QMainWindow):
                     if number:
                         lines.append(f"  {reason_name}: {number:,}")
 
-        if engine == "L3 Inverted Ground R20":
+        if engine == "L3 Inverted Ground R20.1":
+            lines.extend((
+                "R20.1 POST-DECISION GROUND VETO:",
+                f"  Vetoed above mantle: {result.mantle_height_veto_count:,}",
+                f"  Elevated roof candidates vetoed: {result.mantle_roof_veto_count:,}",
+                f"  Canopy candidates vetoed: {result.mantle_canopy_veto_count:,}",
+                f"  Roof candidate XY cells: {result.mantle_roof_candidate_cells:,}",
+                f"  Canopy candidate XY cells: {result.mantle_canopy_candidate_cells:,}",
+                "  These are geometric candidates, NOT confirmed building/tree labels.",
+            ))
+
+        if engine in {"L3 Inverted Ground R20", "L3 Inverted Ground R20.1"}:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
                 f"  Measured returns recovered by mantle: {result.mantle_recovered_count:,}",
