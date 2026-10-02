@@ -62,6 +62,7 @@ class InvertedGroundMantle:
     slope_y: np.ndarray
     reference_z: float
     config: MantleConfig
+    veto_guard: object | None = None  # Optional R20.1 post-decision evidence
 
     @property
     def observed_cell_count(self) -> int:
