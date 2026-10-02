@@ -610,8 +610,9 @@ class MainWindow(QMainWindow):
                 ("R19 score below high", "score_below_high_count"),
                 ("R19 score below medium", "score_below_medium_count"),
             ):
+                display_label = label.replace("R19", revision, 1)
                 lines.append(
-                    f"{label}: {getattr(result, attr, 0):,}"
+                    f"{display_label}: {getattr(result, attr, 0):,}"
                 )
             reasons = getattr(result, "rejection_reason_counts", ())
             if reasons:
