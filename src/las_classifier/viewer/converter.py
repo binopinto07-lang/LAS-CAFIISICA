@@ -16,6 +16,7 @@ from pyproj import CRS
 
 from .. import __version__
 from ..ground.ground_export import _synthetic_record
+from ..terrain.mantle_export import export_mantle_diagnostic
 from .paths import cache_root, converter_executable
 
 
@@ -660,6 +661,43 @@ def prepare_classified(
         result,
         sample_progress,
     )
+
+    def converter_progress(percent: int, message: str) -> None:
+        _emit(progress, 65 + int(percent * 0.35), message)
+
+    _run_converter(viewer_laz, dataset, converter_progress)
+    return dataset
+
+
+def prepare_mantle(
+    source: str | Path,
+    result,
+    progress: ProgressCallback | None = None,
+) -> Path:
+    """R20 diagnostic cloud. Keep it separate from Ground Only + viewer cache."""
+    source_path = Path(source).expanduser().resolve()
+    mantle = getattr(result.model, "mantle", None)
+    if mantle is None:
+        raise ValueError("This result has no R20 inverted mantle")
+
+    root = (
+        cache_root()
+        / source_fingerprint(source_path)
+        / "mantle"
+        / classified_fingerprint(source_path, result)
+    )
+    dataset = root / "potree"
+    if (dataset / "metadata.json").is_file():
+        _emit(progress, 100, "R20 mantle viewer loaded from cache")
+        return dataset
+
+    root.mkdir(parents=True, exist_ok=True)
+    viewer_laz = root / "mantle_viewer.laz"
+
+    def export_progress(percent: int, message: str) -> None:
+        _emit(progress, int(percent * 0.65), message)
+
+    export_mantle_diagnostic(mantle, viewer_laz, export_progress)
 
     def converter_progress(percent: int, message: str) -> None:
         _emit(progress, 65 + int(percent * 0.35), message)
