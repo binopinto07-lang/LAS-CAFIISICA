@@ -11,6 +11,7 @@ from ..classifiers.hybrid_ground import run_hybrid_ground
 from ..classifiers.l3_dense_ground import run_l3_dense_ground
 from ..classifiers.l3_inverted_ground import run_l3_inverted_ground
 from ..classifiers.l3_mantle_veto import run_l3_mantle_veto
+from ..classifiers.l3_ground_continuity import run_l3_ground_continuity
 from ..terrain.mantle_export import export_mantle_diagnostic
 from ..classifiers.l3_ground_lab import run_l3_ground_lab
 from ..classifiers.smrf import SMRFParams, SMRFResult, run_smrf
@@ -89,7 +90,12 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "L3 Inverted Ground R20.1":
+            if self.engine_name == "L3 Ground Continuity R20.2":
+                result = run_l3_ground_continuity(
+                    self.cloud, self.params, callback,
+                    source_override=self.source_override,
+                )
+            elif self.engine_name == "L3 Inverted Ground R20.1":
                 result = run_l3_mantle_veto(
                     self.cloud, self.params, callback,
                     source_override=self.source_override,
