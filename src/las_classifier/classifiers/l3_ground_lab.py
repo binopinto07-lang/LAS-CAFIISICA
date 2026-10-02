@@ -21,6 +21,10 @@ from ..terrain.ground_evidence import (
     GroundEvidenceConfig,
     GroundEvidenceScorer,
     PROV_INVERTED_MANTLE,
+    PROV_MANTLE_VETO,
+)
+from ..terrain.mantle_veto import (
+    VETO_HEIGHT, VETO_ROOF_CANDIDATE, VETO_CANOPY_CANDIDATE,
 )
 from ..terrain.l3_context import (
     CoarseDetrendModel,
@@ -378,6 +382,30 @@ class L3GroundLabModel:
                 GroundDecision.L3_GROUND_MANTLE_RECOVERED
             )
             evidence.provenance[recovered] |= PROV_INVERTED_MANTLE
+
+            guard = getattr(self.mantle, "veto_guard", None)
+            if guard is not None:
+                proposed = guard.classify_veto(x, y, z)
+                # R20.1 applies a genuine POST-decision veto, including PTD
+                # validated class2. A roof following its own mantle must not
+                # escape merely because the PTD originally accepted it.
+                accepted = evidence.classifications() == GROUND_CLASS
+                applied = (proposed != 0) & accepted & ~invalid
+                actual = np.where(applied, proposed, 0).astype(np.uint8)
+                evidence.mantle_veto_code = actual
+                roof = actual == VETO_ROOF_CANDIDATE
+                canopy = actual == VETO_CANOPY_CANDIDATE
+                high = actual == VETO_HEIGHT
+                evidence.decision[roof | high] = int(
+                    GroundDecision.NON_GROUND_OBJECT
+                )
+                evidence.decision[canopy] = int(
+                    GroundDecision.NON_GROUND_VEGETATION
+                )
+                evidence.provenance[applied] |= PROV_MANTLE_VETO
+                evidence.score[applied] = np.minimum(
+                    evidence.score[applied], np.float32(0.20)
+                )
         return evidence
 
     def rejection_reason_points(
@@ -531,6 +559,11 @@ class L3GroundLabResult:
     mantle_inferred_cells: int = 0
     mantle_ambiguous_cells: int = 0
     mantle_possible_unobserved_cells: int = 0
+    mantle_height_veto_count: int = 0
+    mantle_roof_veto_count: int = 0
+    mantle_canopy_veto_count: int = 0
+    mantle_roof_candidate_cells: int = 0
+    mantle_canopy_candidate_cells: int = 0
 
     @property
     def point_count(self) -> int:
@@ -834,6 +867,7 @@ def run_l3_ground_lab(
         max(int(item) for item in GroundRejectReason) + 1,
         dtype=np.int64,
     )
+    mantle_veto_totals = np.zeros(4, dtype=np.int64)
 
     scales = cloud.las.header.scales
     offsets = cloud.las.header.offsets
@@ -913,6 +947,10 @@ def run_l3_ground_lab(
                 minlength=reason_histogram.size,
             ).astype(np.int64, copy=False)
 
+        if evidence.mantle_veto_code is not None:
+            mantle_veto_totals += np.bincount(
+                evidence.mantle_veto_code, minlength=4
+            ).astype(np.int64, copy=False)
         for decision in totals:
             totals[decision] += int(
                 np.count_nonzero(
@@ -1105,6 +1143,16 @@ def run_l3_ground_lab(
             gate_diagnostics.score_below_high,
             gate_diagnostics.score_below_medium,
         )
+    if getattr(mantle, "veto_guard", None) is not None:
+        LOGGER.info(
+            "R20_1_VETO height=%d roof_candidate=%d canopy_candidate=%d "
+            "roof_cells=%d canopy_cells=%d",
+            int(mantle_veto_totals[int(VETO_HEIGHT)]),
+            int(mantle_veto_totals[int(VETO_ROOF_CANDIDATE)]),
+            int(mantle_veto_totals[int(VETO_CANOPY_CANDIDATE)]),
+            mantle.veto_guard.roof_candidate_cell_count,
+            mantle.veto_guard.canopy_candidate_cell_count,
+        )
     LOGGER.info(
         "SYNTHETIC_POINTS=0"
     )
@@ -1255,6 +1303,17 @@ def run_l3_ground_lab(
         mantle_ambiguous_cells=mantle.ambiguous_cell_count if mantle is not None else 0,
         mantle_possible_unobserved_cells=(
             mantle.possible_no_ground_observation_count if mantle is not None else 0
+        ),
+        mantle_height_veto_count=int(mantle_veto_totals[int(VETO_HEIGHT)]),
+        mantle_roof_veto_count=int(mantle_veto_totals[int(VETO_ROOF_CANDIDATE)]),
+        mantle_canopy_veto_count=int(mantle_veto_totals[int(VETO_CANOPY_CANDIDATE)]),
+        mantle_roof_candidate_cells=(
+            mantle.veto_guard.roof_candidate_cell_count
+            if getattr(mantle, "veto_guard", None) is not None else 0
+        ),
+        mantle_canopy_candidate_cells=(
+            mantle.veto_guard.canopy_candidate_cell_count
+            if getattr(mantle, "veto_guard", None) is not None else 0
         ),
         rejection_reason_counts=(
             tuple(
