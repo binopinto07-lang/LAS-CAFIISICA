@@ -296,3 +296,38 @@ def build_ground_continuity(
         expansion_steps=expansion_steps,
         config=cfg,
     )
+
+
+def apply_continuity_recovery(
+    evidence,
+    continuity: GroundContinuity,
+    veto_guard: MantleVeto,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    invalid: np.ndarray,
+) -> np.ndarray:
+    """Apply R20.2 after R20.1, never reaccepting an object/roof/invalid.
+
+    Class2 and last/only returns are NOT sufficient. Every recovered return
+    is measured, in a connected observed cell, tangent-plane supported,
+    and must pass the R20.1 veto again.
+    """
+    from .ground_evidence import GroundDecision, PROV_GROUND_CONTINUITY
+
+    invalid = np.asarray(invalid, dtype=np.bool_)
+    veto_codes = veto_guard.classify_veto(x, y, z)
+    candidate = continuity.recovery_mask(x, y, z, veto_codes=veto_codes)
+    recovered = (
+        candidate
+        & (evidence.classifications() != 2)
+        & (veto_codes == VETO_NONE)
+        & ~invalid
+        & (evidence.decision != int(GroundDecision.NOISE))
+    )
+    evidence.continuity_recovered = recovered
+    evidence.decision[recovered] = int(
+        GroundDecision.L3_GROUND_CONTINUITY_RECOVERED
+    )
+    evidence.provenance[recovered] |= PROV_GROUND_CONTINUITY
+    return recovered
