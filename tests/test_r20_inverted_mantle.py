@@ -15,7 +15,7 @@ from las_classifier.terrain.mantle_export import (
 )
 
 
-def _synthetic_grid(*, no_anchors: bool = False, step: bool = False):
+def _synthetic_grid(*, no_anchors: bool = False, step: bool = False, shuffled: bool = False):
     grid = DenseSpatialEvidenceGrid.create(
         np.array([0.0, 0.0]), np.array([3.0, 3.0]),
         spacing=0.05, strong_threshold=0.68, max_cells=10_000,
@@ -36,10 +36,17 @@ def _synthetic_grid(*, no_anchors: bool = False, step: bool = False):
     z = np.asarray(z)
     score = np.asarray(scores)
     mask = np.asarray(geometry, dtype=np.bool_)
+    x = np.asarray(x)
+    y = np.asarray(y)
+    if shuffled:
+        order = np.random.default_rng(20).permutation(z.size)
+        x, y, z, score, mask = (
+            x[order], y[order], z[order], score[order], mask[order]
+        )
     residual = np.where(mask, 0.02, np.nan)
     plane = np.where(mask, 0.01, np.inf)
     grid.accumulate(
-        x=np.asarray(x), y=np.asarray(y), z=z, ptd_score=score,
+        x=x, y=y, z=z, ptd_score=score,
         vertical_residual=residual, plane_distance=plane,
         valid_mask=np.ones(z.size, dtype=np.bool_),
         geometry_mask=mask,
@@ -94,3 +101,19 @@ def test_r20_inferred_cells_are_separate_from_measured_ground(tmp_path):
         assert np.any(np.asarray(las[MANTLE_STATE]) == STATE_INFERRED_EMPTY)
         assert not np.any(np.asarray(las.classification) == 2)
         assert np.all(np.asarray(las.synthetic) == 1)
+
+
+def test_r20_mantle_and_accepted_mask_are_point_order_invariant():
+    standard = build_inverted_ground_mantle(_synthetic_grid())
+    shuffled = build_inverted_ground_mantle(_synthetic_grid(shuffled=True))
+    np.testing.assert_array_equal(standard.observed, shuffled.observed)
+    np.testing.assert_array_equal(standard.reliable, shuffled.reliable)
+    np.testing.assert_array_equal(standard.inferred, shuffled.inferred)
+    np.testing.assert_allclose(standard.surface, shuffled.surface, atol=1e-6)
+    x = np.array([1.225, 0.525])
+    y = np.array([1.225, 0.525])
+    z = np.array([10.06, 11.0])
+    np.testing.assert_array_equal(
+        standard.recovery_mask(x, y, z),
+        shuffled.recovery_mask(x, y, z),
+    )
