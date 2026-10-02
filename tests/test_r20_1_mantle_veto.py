@@ -9,6 +9,9 @@ import numpy as np
 
 from las_classifier.terrain.dense_spatial_evidence import DenseSpatialEvidenceGrid
 from las_classifier.terrain.inverted_mantle import build_inverted_ground_mantle
+from las_classifier.terrain.mantle_export import (
+    mantle_state_grid, STATE_ROOF_CANDIDATE, STATE_CANOPY_CANDIDATE,
+)
 from las_classifier.terrain.mantle_veto import (
     VETO_CANOPY_CANDIDATE,
     VETO_HEIGHT,
@@ -133,3 +136,16 @@ def test_guard_results_do_not_depend_on_query_point_order():
     order = np.array([1, 0])
     actual = guard.classify_veto(x[order], y[order], z[order])
     np.testing.assert_array_equal(expected[order], actual)
+
+
+def test_r20_1_mantle_view_warns_roof_and_canopy_without_classifying_them_ground():
+    for options, centre, expected in (
+        ({"roof": True}, (25, 25), STATE_ROOF_CANDIDATE),
+        ({"canopy": True}, (24, 24), STATE_CANOPY_CANDIDATE),
+    ):
+        grid = _scene(**options)
+        mantle = build_inverted_ground_mantle(grid)
+        mantle.veto_guard = build_mantle_veto(grid, mantle)
+        states = mantle_state_grid(mantle)
+        assert states[centre[1], centre[0]] == expected
+        assert not np.any(states == 2)  # Dense synthetic scene: no invented holes.
