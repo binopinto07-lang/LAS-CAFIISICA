@@ -9,6 +9,8 @@ from ..classifiers.adaptive_ptd import run_adaptive_ptd
 from ..classifiers.csf_engine import run_csf
 from ..classifiers.hybrid_ground import run_hybrid_ground
 from ..classifiers.l3_dense_ground import run_l3_dense_ground
+from ..classifiers.l3_inverted_ground import run_l3_inverted_ground
+from ..terrain.mantle_export import export_mantle_diagnostic
 from ..classifiers.l3_ground_lab import run_l3_ground_lab
 from ..classifiers.smrf import SMRFParams, SMRFResult, run_smrf
 from ..ground.ground_export import export_ground_only
@@ -86,7 +88,12 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "L3 Dense Ground R19":
+            if self.engine_name == "L3 Inverted Ground R20":
+                result = run_l3_inverted_ground(
+                    self.cloud, self.params, callback,
+                    source_override=self.source_override,
+                )
+            elif self.engine_name == "L3 Dense Ground R19":
                 result = run_l3_dense_ground(
                     self.cloud,
                     self.params,
@@ -211,4 +218,32 @@ class GroundExportWorker(QThread):
             self.failed.emit(str(exc))
             return
 
+        self.completed.emit(str(path))
+
+
+class MantleExportWorker(QThread):
+    """Write the R20 mantle separately from real measured Ground."""
+
+    completed = Signal(str)
+    failed = Signal(str)
+    progress_changed = Signal(int, str)
+
+    def __init__(self, output_path: Path, result, parent=None) -> None:
+        super().__init__(parent)
+        self.output_path = Path(output_path)
+        self.result = result
+
+    def run(self) -> None:
+        try:
+            mantle = getattr(self.result.model, "mantle", None)
+            if mantle is None:
+                raise ValueError("R20 inverted mantle is not available")
+            path = export_mantle_diagnostic(
+                mantle, self.output_path,
+                lambda p, message: self.progress_changed.emit(p, message),
+            )
+        except Exception as exc:
+            LOGGER.exception("R20 mantle export failed")
+            self.failed.emit(str(exc))
+            return
         self.completed.emit(str(path))
