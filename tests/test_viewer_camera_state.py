@@ -24,3 +24,25 @@ def test_only_first_loaded_cloud_is_auto_fitted():
     assert "if (!state.autoFitted)" in source
     assert "state.autoFitted = true;" in source
     assert "state.autoFitted = false;" in source
+
+
+def test_r20_mantle_view_preserves_camera_and_is_not_in_compare_overlay():
+    source = _app_js()
+    start = source.index("function setViewMode(mode)")
+    stop = source.index("function fit()", start)
+    block = source[start:stop]
+
+    assert '"mantle"' in block
+    assert "fitRepeatedly();" not in block
+    assert 'key === "original" || key === "classified"' in source
+    assert 'mode === "mantle"' in block
+
+
+def test_r20_mantle_view_is_lazily_prepared():
+    root = Path(__file__).resolve().parents[1]
+    widget = (root / "src/las_classifier/viewer/widget.py").read_text(encoding="utf-8")
+    worker = (root / "src/las_classifier/viewer/workers.py").read_text(encoding="utf-8")
+    assert "mantle_requested = Signal()" in widget
+    assert 'self._loaded["mantle"]' in widget
+    assert 'self.mantle_requested.emit()' in widget
+    assert 'prepare_mantle(' in worker
