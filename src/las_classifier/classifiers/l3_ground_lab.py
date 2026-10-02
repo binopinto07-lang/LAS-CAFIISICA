@@ -21,10 +21,10 @@ from ..terrain.ground_evidence import (
     GroundEvidenceConfig,
     GroundEvidenceScorer,
     PROV_INVERTED_MANTLE,
-    PROV_MANTLE_VETO,
 )
 from ..terrain.mantle_veto import (
     VETO_HEIGHT, VETO_ROOF_CANDIDATE, VETO_CANOPY_CANDIDATE,
+    apply_mantle_veto,
 )
 from ..terrain.l3_context import (
     CoarseDetrendModel,
@@ -385,27 +385,7 @@ class L3GroundLabModel:
 
             guard = getattr(self.mantle, "veto_guard", None)
             if guard is not None:
-                proposed = guard.classify_veto(x, y, z)
-                # R20.1 applies a genuine POST-decision veto, including PTD
-                # validated class2. A roof following its own mantle must not
-                # escape merely because the PTD originally accepted it.
-                accepted = evidence.classifications() == GROUND_CLASS
-                applied = (proposed != 0) & accepted & ~invalid
-                actual = np.where(applied, proposed, 0).astype(np.uint8)
-                evidence.mantle_veto_code = actual
-                roof = actual == VETO_ROOF_CANDIDATE
-                canopy = actual == VETO_CANOPY_CANDIDATE
-                high = actual == VETO_HEIGHT
-                evidence.decision[roof | high] = int(
-                    GroundDecision.NON_GROUND_OBJECT
-                )
-                evidence.decision[canopy] = int(
-                    GroundDecision.NON_GROUND_VEGETATION
-                )
-                evidence.provenance[applied] |= PROV_MANTLE_VETO
-                evidence.score[applied] = np.minimum(
-                    evidence.score[applied], np.float32(0.20)
-                )
+                apply_mantle_veto(evidence, guard, x, y, z, invalid)
         return evidence
 
     def rejection_reason_points(
@@ -1110,7 +1090,7 @@ def run_l3_ground_lab(
         ),
     )
     if collect_gate_diagnostics:
-        diagnostic_revision = "R20" if mantle is not None else "R19"
+        diagnostic_revision = revision_label if mantle is not None else "R19"
         exclusive_rejected = int(np.sum(reason_histogram[1:], dtype=np.int64))
         if exclusive_rejected != non_ground_count:
             raise RuntimeError(
