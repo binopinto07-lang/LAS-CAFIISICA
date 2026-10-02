@@ -42,7 +42,16 @@ class ViewerPrepareWorker(QThread):
                 if self.result is None:
                     raise RuntimeError("R20 mantle viewer requires a ground result")
                 dataset = prepare_mantle(self.source_path, self.result, callback)
-                title = self.source_path.name + " — R20 MANTO (INFERIDO / NAO MEDIDO)"
+                engine = getattr(self.result, "engine_name", "")
+                revision = (
+                    "R20.2" if engine == "L3 Ground Continuity R20.2"
+                    else "R20.1" if engine == "L3 Inverted Ground R20.1"
+                    else "R20"
+                )
+                title = (
+                    self.source_path.name
+                    + f" — {revision} MANTO (INFERIDO / NAO MEDIDO)"
+                )
                 classified = False
             else:
                 if self.result is None:
