@@ -62,6 +62,8 @@ class InvertedGroundMantle:
     slope_y: np.ndarray
     reference_z: float
     config: MantleConfig
+    # Raster breakline used by R20.3 as a terminal face-recovery barrier.
+    breakline: np.ndarray | None = None
     veto_guard: object | None = None  # Optional R20.1 post-decision evidence
 
     @property
@@ -301,4 +303,5 @@ def build_inverted_ground_mantle(
         slope_y=slope_y,
         reference_z=reference_z,
         config=cfg,
+        breakline=breakline.astype(np.bool_, copy=False),
     )
