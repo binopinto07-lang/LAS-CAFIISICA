@@ -1,4 +1,4 @@
-"""Separate R20.2 engine retaining the R20.1 veto and unchanged mantle."""
+"""Separate R20.3 engine retaining the R20.1 veto and unchanged mantle."""
 from __future__ import annotations
 
 from typing import Callable
@@ -16,9 +16,9 @@ ProgressCallback = Callable[[int, str], None]
 
 def _continuity_builder(context, mantle, progress):
     if mantle is None or mantle.veto_guard is None:
-        raise RuntimeError("R20.2 requires the R20.1 guarded mantle")
+        raise RuntimeError("R20.3 requires the R20.1 guarded mantle")
     if progress is not None:
-        progress(56, "R20.2: measured-only 3D continuity graph")
+        progress(56, "R20.3: breakline-safe measured Ground recovery")
     return build_ground_continuity(context, mantle, mantle.veto_guard)
 
 
@@ -37,7 +37,7 @@ def run_l3_ground_continuity(
         context_builder=_dense_context,
         mantle_builder=_mantle_with_guard,
         continuity_builder=_continuity_builder,
-        engine_name="L3 Ground Continuity R20.2",
-        revision_label="R20.2",
+        engine_name="L3 Ground Continuity R20.3",
+        revision_label="R20.3",
         collect_gate_diagnostics=True,
     )
