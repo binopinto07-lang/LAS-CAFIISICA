@@ -90,7 +90,7 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "L3 Ground Continuity R20.2":
+            if self.engine_name == "L3 Ground Continuity R20.3":
                 result = run_l3_ground_continuity(
                     self.cloud, self.params, callback,
                     source_override=self.source_override,
