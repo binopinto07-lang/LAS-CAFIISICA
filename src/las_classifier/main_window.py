@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
-                "L3 Ground Continuity R20.2",
+                "L3 Ground Continuity R20.3",
                 "L3 Inverted Ground R20.1",
                 "L3 Inverted Ground R20",
                 "L3 Dense Ground R19",
@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("L3 Ground Continuity R20.2")
+        self.engine_combo.setCurrentText("L3 Ground Continuity R20.3")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
