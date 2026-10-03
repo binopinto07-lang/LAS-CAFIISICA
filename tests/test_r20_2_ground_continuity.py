@@ -114,6 +114,10 @@ def test_near_surface_return_is_recovered_but_elevated_canopy_is_not():
     high = low + 1.0
     assert continuity.recovery_mask(x, y, low)[0]
     assert not continuity.recovery_mask(x, y, high)[0]
+    # Height veto requires a reliable local mantle reference.  The continuity
+    # test above intentionally uses an unreliable cell to verify recovery from
+    # measured evidence; make this independent veto check explicitly reliable.
+    guard.reliable[12, 10] = True
     assert guard.classify_veto(x, y, high)[0] == VETO_HEIGHT
     assert not continuity.recovery_mask(
         x, y, low, veto_codes=np.array([VETO_ROOF_CANDIDATE], dtype=np.uint8)
