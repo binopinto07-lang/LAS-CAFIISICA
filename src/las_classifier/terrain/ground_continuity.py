@@ -250,10 +250,13 @@ def build_ground_continuity(
     # though its own measured returns are valid Ground.  Permit such cells as
     # TERMINAL recovery targets, but do not let them become propagation
     # bridges. This preserves the physical step between terrace levels.
-    breakline = (
-        np.asarray(getattr(mantle, "breakline", np.zeros(shape, dtype=np.bool_)))
-        .reshape(shape)
-    )
+    raw_breakline = getattr(mantle, "breakline", None)
+    if raw_breakline is None:
+        breakline = np.zeros(shape, dtype=np.bool_)
+    else:
+        breakline = np.asarray(raw_breakline, dtype=np.bool_)
+        if breakline.shape != shape:
+            raise ValueError("R20.3 breakline mask shape mismatch")
     face_eligible = (
         measured & near_reference & ~blocked & breakline
         & np.isfinite(surface)
