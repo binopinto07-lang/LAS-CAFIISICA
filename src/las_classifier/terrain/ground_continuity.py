@@ -74,6 +74,7 @@ class GroundContinuity:
     connected: np.ndarray
     eligible: np.ndarray
     blocked: np.ndarray
+    breakline: np.ndarray
     expansion_steps: int
     config: ContinuityConfig
 
@@ -238,13 +239,30 @@ def build_ground_continuity(
     # Allow vegetation above a measured lower terrain return; point-level
     # normal gate will exclude vegetation. Do not propagate through a pure
     # elevated canopy/roof island flagged by R20.1.
-    eligible = (
+    base_eligible = (
         measured & near_reference & not_artificial & ~blocked
         & (
             (spread <= cfg.max_cell_spread_m)
             | (strong >= 2)
         )
     )
+    # R20.3: a terrace face/edge may be flagged as a raster breakline even
+    # though its own measured returns are valid Ground.  Permit such cells as
+    # TERMINAL recovery targets, but do not let them become propagation
+    # bridges. This preserves the physical step between terrace levels.
+    breakline = (
+        np.asarray(getattr(mantle, "breakline", np.zeros(shape, dtype=np.bool_)))
+        .reshape(shape)
+    )
+    face_eligible = (
+        measured & near_reference & ~blocked & breakline
+        & np.isfinite(surface)
+        & (np.abs(grid.min_z.reshape(shape) - surface) <= max(
+            cfg.max_cell_surface_offset_m, 0.62
+        ))
+        & (spread <= cfg.max_cell_spread_m)
+    )
+    eligible = base_eligible | face_eligible
     source_anchors = (
         eligible & mantle.reliable
         & (geometry_count >= 2) & (strong >= 2)
@@ -255,10 +273,13 @@ def build_ground_continuity(
     expansion_steps = 0
     if np.any(source_anchors):
         for iteration in range(max(1, int(cfg.max_iterations))):
+            # Breakline cells can be recovered as terminal measured
+            # faces, but they cannot be used as bridges to the opposite level.
+            bridge_source = connected & ~breakline
             neighbour_votes = np.zeros(shape, dtype=np.uint8)
             for dy, dx in _NEIGHBOURS:
                 from_connected = _shift(
-                    connected, dy, dx, np.bool_(False)
+                    bridge_source, dy, dx, np.bool_(False)
                 )
                 can_join = _linkable(surface, sx, sy, grid.cell_size, dy, dx, cfg)
                 neighbour_votes += (from_connected & can_join).astype(np.uint8)
@@ -273,12 +294,13 @@ def build_ground_continuity(
 
     LOGGER.info(
         "R20_2_CONTINUITY anchors=%d eligible=%d connected=%d expanded=%d "
-        "blocked=%d passes=%d unobserved_added=0 synthetic=0",
+        "blocked=%d breakline=%d passes=%d unobserved_added=0 synthetic=0",
         int(np.count_nonzero(source_anchors)),
         int(np.count_nonzero(eligible)),
         int(np.count_nonzero(connected)),
         int(np.count_nonzero(connected & ~source_anchors)),
         int(np.count_nonzero(blocked)),
+        int(np.count_nonzero(breakline)),
         expansion_steps,
     )
     return GroundContinuity(
@@ -293,6 +315,7 @@ def build_ground_continuity(
         connected=connected,
         eligible=eligible,
         blocked=blocked,
+        breakline=breakline,
         expansion_steps=expansion_steps,
         config=cfg,
     )
