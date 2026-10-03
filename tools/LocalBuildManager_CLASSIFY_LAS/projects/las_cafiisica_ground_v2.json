@@ -1,8 +1,8 @@
 {
   "id": "las_cafiisica_ground_v2",
-  "name": "LAS-CAFIISICA — R20.2 GROUND CONTINUITY",
+  "name": "LAS-CAFIISICA — R20.3 BREAKLINE-SAFE GROUND",
   "repo_url": "https://github.com/binopinto07-lang/LAS-CAFIISICA.git",
-  "branch": "r20-2-continuity-recovery",
+  "branch": "r20-3-breakline-recovery",
   "python_version": "3.12",
   "dist_dir_name": "LAS_CAFIISICA",
   "checks": [
@@ -33,7 +33,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_2'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_3'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -133,7 +133,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_2'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_3'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -229,7 +229,7 @@
     ]
   },
   "release": {},
-  "config_revision": 39,
+  "config_revision": 40,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -328,7 +328,7 @@
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_GROUND_V2_2026_10_R20_2"
+    "value": "LAS_CAFIISICA_GROUND_V2_2026_10_R20_3"
   },
   "auto_bootstrap_python": true
 }
