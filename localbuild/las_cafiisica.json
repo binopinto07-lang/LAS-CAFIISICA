@@ -324,7 +324,9 @@
     "src/las_classifier/terrain/ground_continuity.py",
     "src/las_classifier/classifiers/l3_ground_continuity.py",
     "tests/test_r20_2_ground_continuity.py",
-    "R20_2_LEIA_ME.md"
+    "R20_2_LEIA_ME.md",
+    "tests/test_r20_3_breakline_recovery.py",
+    "R20_3_LEIA_ME.md"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
