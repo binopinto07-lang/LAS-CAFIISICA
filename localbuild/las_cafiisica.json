@@ -331,7 +331,8 @@
     "src/las_classifier/terrain/mdt_export.py",
     "tests/test_r20_4_universal_ground.py",
     "tests/test_r20_4_mdt.py",
-    "R20_4_LEIA_ME.md"
+    "R20_4_LEIA_ME.md",
+    "tests/test_r20_4_spatial_sample.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
