@@ -551,7 +551,8 @@ class MainWindow(QMainWindow):
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.2" if getattr(result.model, "continuity", None) is not None
+            "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
+            else "MANTO R20.3" if getattr(result.model, "continuity", None) is not None
             else "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
             else "MANTO R20",
         )
@@ -667,7 +668,7 @@ class MainWindow(QMainWindow):
             "Universal Ground R20.4",
         }:
             lines.extend((
-                "R20.2 MEASURED GROUND CONTINUITY:",
+                f"{'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
                 f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
                 f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
