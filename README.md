@@ -63,3 +63,15 @@ See [R20_1_LEIA_ME.md](R20_1_LEIA_ME.md). The separate branch `r20-1-mantle-veto
 ## R20.2 — Ground Continuity Recovery (experimental)
 
 See [R20_2_LEIA_ME.md](R20_2_LEIA_ME.md). Branch `r20-2-continuity-recovery` preserves the R20/R20.1 engines, the original inverted cloth, roof/canopy veto, EPSG:3763, viewer camera and measured-only Ground export. Open `START_BUILD_MANAGER.bat` and run BUILD + TESTES using integrated profile revision 39.
+
+
+## R20.4 — Universal Ground + MDT (experimental)
+
+Branch `r20-4-universal-mdt` promotes one geometry-first pipeline for P1,
+L3/LiDAR and unknown LAS/LAZ sources. Sensor identity no longer blocks the
+R20.3 mantle/veto/continuity procedure. Return metadata is optional evidence
+only when the complete dense grid proves a meaningful multi-return population.
+
+After classification the application can create an EPSG:3763 MDT plus a
+separate observation-state GeoTIFF distinguishing measured Ground from
+raster-only interpolation. See [R20_4_LEIA_ME.md](R20_4_LEIA_ME.md).
