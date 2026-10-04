@@ -190,13 +190,12 @@ def export_classified(
                         scales[2],
                         offsets[2],
                     )
-                    points.classification = (
-                        model.classify_xyz(
-                            x,
-                            y,
-                            z,
-                        )
-                    )
+                    classify_points = getattr(model, "classify_points", None)
+                    if classify_points is not None:
+                        classes = classify_points(points, x, y, z)
+                    else:
+                        classes = model.classify_xyz(x, y, z)
+                    points.classification = classes
                     writer.write_points(
                         points
                     )
