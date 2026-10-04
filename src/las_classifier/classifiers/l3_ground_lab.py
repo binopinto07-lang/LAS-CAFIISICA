@@ -172,6 +172,7 @@ class L3GroundLabModel:
     scorer: GroundEvidenceScorer
     source_inspection: SourceInspection
     engine_name: str = "L3 Ground Lab"
+    return_evidence_enabled: bool = True
     mantle: object | None = None
     continuity: object | None = None
 
@@ -369,6 +370,7 @@ class L3GroundLabModel:
             invalid_mask=invalid,
             source_noise_mask=None,
             spatial_presence=spatial_presence,
+            use_return_evidence=self.return_evidence_enabled,
         )
         if self.mantle is not None:
             # This is measured-return recovery ONLY. Never relabel a withheld,
@@ -659,6 +661,7 @@ def run_l3_ground_lab(
     collect_gate_diagnostics: bool = False,
     mantle_builder: Callable | None = None,
     continuity_builder: Callable | None = None,
+    require_lidar: bool = True,
 ) -> L3GroundLabResult:
     started = perf_counter()
     requested = (
@@ -691,16 +694,30 @@ def run_l3_ground_lab(
         cloud,
         override=source_override,
     )
-    if (
-        inspection.source_type
-        is not SourceType.L3_LIDAR
-    ):
+    if require_lidar and inspection.source_type is not SourceType.L3_LIDAR:
         raise RuntimeError(
             f"{revision_label} L3 Ground Lab aceita apenas "
             "nuvens L3/LiDAR nesta fase. "
             "Source Inspector: "
             f"{inspection.source_type.value}."
         )
+
+    # One universal geometry pipeline is used for P1, L3 and UNKNOWN sources.
+    # Multi-return evidence is enabled only when the LAS values actually prove
+    # a meaningful multi-return population.  A P1-style 1/1 population stays
+    # neutral and can never become a Ground shortcut.
+    return_evidence_enabled = bool(
+        inspection.has_returns
+        and inspection.max_number_of_returns > 1
+        and inspection.multi_return_fraction >= 0.01
+    )
+    LOGGER.info(
+        "%s_SOURCE_POLICY type=%s return_evidence=%s require_lidar=%s",
+        revision_label,
+        inspection.source_type.value,
+        return_evidence_enabled,
+        require_lidar,
+    )
 
     def ptd_progress(
         percent: int,
@@ -836,6 +853,7 @@ def run_l3_ground_lab(
         ),
         source_inspection=inspection,
         engine_name=engine_name,
+        return_evidence_enabled=return_evidence_enabled,
         mantle=mantle,
         continuity=continuity,
     )
@@ -877,8 +895,8 @@ def run_l3_ground_lab(
         progress,
         58,
         (
-            "L3 second pass: scoring "
-            "every measured return"
+            f"{revision_label} second pass: scoring "
+            "every measured point"
         ),
     )
 
