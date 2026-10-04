@@ -31,6 +31,7 @@ from .cloud.classification_worker import (
     GroundEngineWorker,
     GroundExportWorker,
     MantleExportWorker,
+    MDTExportWorker,
 )
 from .cloud.worker import CloudLoadWorker
 from .ground.types import GroundEngineParams
@@ -54,6 +55,7 @@ class MainWindow(QMainWindow):
         self._ground_worker: GroundEngineWorker | None = None
         self._export_worker: GroundExportWorker | None = None
         self._mantle_worker: MantleExportWorker | None = None
+        self._mdt_worker: MDTExportWorker | None = None
         self._viewer_worker: ViewerPrepareWorker | None = None
         self._pending_filename: str | None = None
         self._viewer_loaded: set[str] = set()
@@ -75,6 +77,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "Universal Ground R20.4",
                 "L3 Ground Continuity R20.3",
                 "L3 Inverted Ground R20.1",
                 "L3 Inverted Ground R20",
@@ -86,7 +89,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("L3 Ground Continuity R20.3")
+        self.engine_combo.setCurrentText("Universal Ground R20.4")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -177,10 +180,18 @@ class MainWindow(QMainWindow):
         self.mantle_export_button.setEnabled(False)
         self.mantle_export_button.clicked.connect(self.export_inverted_mantle)
 
+        self.mdt_button = QPushButton("CRIAR MDT DO GROUND")
+        self.mdt_button.setToolTip(
+            "Cria MDT EPSG:3763 e mapa Observado/Interpolado a partir do Ground atual."
+        )
+        self.mdt_button.setEnabled(False)
+        self.mdt_button.clicked.connect(self.export_ground_mdt)
+
         buttons.addWidget(self.ground_button)
         buttons.addWidget(self.export_button)
         form.addRow(buttons)
         form.addRow(self.mantle_export_button)
+        form.addRow(self.mdt_button)
         engine_box.setLayout(form)
 
         self.statistics_view = QPlainTextEdit()
@@ -245,6 +256,9 @@ class MainWindow(QMainWindow):
                 getattr(self._ground_result, "model", None), "mantle", None
             ) is not None
         )
+        self.mdt_button.setEnabled(
+            not active and self._ground_result is not None
+        )
         if active:
             self.statusBar().showMessage(message)
 
@@ -265,6 +279,7 @@ class MainWindow(QMainWindow):
                 self._ground_worker,
                 self._export_worker,
                 self._mantle_worker,
+                self._mdt_worker,
                 self._viewer_worker,
             )
         ):
@@ -463,7 +478,8 @@ class MainWindow(QMainWindow):
         engine: str,
     ) -> None:
         measured_l3 = engine in {
-            "L3 Ground Continuity R20.2",
+            "Universal Ground R20.4",
+            "L3 Ground Continuity R20.3",
             "L3 Inverted Ground R20.1",
             "L3 Inverted Ground R20",
             "L3 Dense Ground R19",
@@ -478,6 +494,10 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setEnabled(
             not measured_l3
         )
+        universal = engine == "Universal Ground R20.4"
+        if universal:
+            self.source_combo.setCurrentText("Auto detect")
+        self.source_combo.setEnabled(not universal)
 
     def _source_override(self) -> str | None:
         text = self.source_combo.currentText()
@@ -593,9 +613,13 @@ class MainWindow(QMainWindow):
             "L3 Inverted Ground R20",
             "L3 Inverted Ground R20.1",
             "L3 Ground Continuity R20.2",
+            "L3 Ground Continuity R20.3",
+            "Universal Ground R20.4",
         }:
             revision = (
-                "R20.2" if engine == "L3 Ground Continuity R20.2"
+                "R20.4" if engine == "Universal Ground R20.4"
+                else "R20.3" if engine == "L3 Ground Continuity R20.3"
+                else "R20.2" if engine == "L3 Ground Continuity R20.2"
                 else "R20.1" if engine == "L3 Inverted Ground R20.1"
                 else "R20" if engine == "L3 Inverted Ground R20" else "R19"
             )
@@ -621,7 +645,12 @@ class MainWindow(QMainWindow):
                     if number:
                         lines.append(f"  {reason_name}: {number:,}")
 
-        if engine in {"L3 Inverted Ground R20.1", "L3 Ground Continuity R20.2"}:
+        if engine in {
+            "L3 Inverted Ground R20.1",
+            "L3 Ground Continuity R20.2",
+            "L3 Ground Continuity R20.3",
+            "Universal Ground R20.4",
+        }:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
                 f"  Vetoed above mantle: {result.mantle_height_veto_count:,}",
@@ -632,7 +661,11 @@ class MainWindow(QMainWindow):
                 "  These are geometric candidates, NOT confirmed building/tree labels.",
             ))
 
-        if engine == "L3 Ground Continuity R20.2":
+        if engine in {
+            "L3 Ground Continuity R20.2",
+            "L3 Ground Continuity R20.3",
+            "Universal Ground R20.4",
+        }:
             lines.extend((
                 "R20.2 MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
@@ -648,6 +681,8 @@ class MainWindow(QMainWindow):
             "L3 Inverted Ground R20",
             "L3 Inverted Ground R20.1",
             "L3 Ground Continuity R20.2",
+            "L3 Ground Continuity R20.3",
+            "Universal Ground R20.4",
         }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
@@ -745,6 +780,68 @@ class MainWindow(QMainWindow):
         worker.finished.connect(self._export_finished)
         self._export_worker = worker
         worker.start()
+
+    def export_ground_mdt(self) -> None:
+        if (
+            self._cloud is None
+            or self._ground_result is None
+            or self._mdt_worker is not None
+        ):
+            return
+        source = self._cloud.path
+        suggested = source.with_name(source.stem + "_MDT_R20_4.tif")
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Criar MDT do Ground",
+            str(suggested),
+            "GeoTIFF (*.tif *.tiff)",
+        )
+        if not filename:
+            return
+        output = Path(filename)
+        if output.suffix.lower() not in {".tif", ".tiff"}:
+            output = output.with_suffix(".tif")
+
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self._busy(True, "R20.4: criar MDT a partir do Ground...")
+        worker = MDTExportWorker(
+            source,
+            output,
+            self._ground_result,
+            0.25,
+            0.75,
+            self,
+        )
+        worker.progress_changed.connect(self._set_progress)
+        worker.completed.connect(self._mdt_succeeded)
+        worker.failed.connect(self._mdt_failed)
+        worker.finished.connect(self._mdt_finished)
+        self._mdt_worker = worker
+        worker.start()
+
+    def _mdt_succeeded(self, info) -> None:
+        self.statusBar().showMessage(f"MDT concluído: {info['mdt']}")
+        QMessageBox.information(
+            self,
+            "LAS-CAFIISICA — MDT R20.4",
+            "MDT criado:\n"
+            + info["mdt"]
+            + "\n\nEstado de observação:\n"
+            + info["observation_state"]
+            + "\n\n1 = Ground medido; 2 = MDT interpolado; 0 = sem Ground observado.",
+        )
+
+    def _mdt_failed(self, message: str) -> None:
+        self.statusBar().showMessage("MDT falhou")
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.4", message)
+
+    def _mdt_finished(self) -> None:
+        worker = self._mdt_worker
+        self._mdt_worker = None
+        self._busy(False)
+        if worker is not None:
+            worker.deleteLater()
 
     def export_inverted_mantle(self) -> None:
         if (
