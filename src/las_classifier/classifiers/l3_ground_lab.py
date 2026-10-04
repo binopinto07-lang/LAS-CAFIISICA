@@ -702,20 +702,14 @@ def run_l3_ground_lab(
             f"{inspection.source_type.value}."
         )
 
-    # One universal geometry pipeline is used for P1, L3 and UNKNOWN sources.
-    # Multi-return evidence is enabled only when the LAS values actually prove
-    # a meaningful multi-return population.  A P1-style 1/1 population stays
-    # neutral and can never become a Ground shortcut.
-    return_evidence_enabled = bool(
-        inspection.has_returns
-        and inspection.max_number_of_returns > 1
-        and inspection.multi_return_fraction >= 0.01
-    )
+    # Source identification is diagnostic. It does not choose the R20.4
+    # algorithm. Return evidence is decided later from the complete dense grid
+    # so point ordering cannot change the universal classification policy.
+    return_evidence_enabled = False
     LOGGER.info(
-        "%s_SOURCE_POLICY type=%s return_evidence=%s require_lidar=%s",
+        "%s_SOURCE_POLICY type=%s require_lidar=%s",
         revision_label,
         inspection.source_type.value,
-        return_evidence_enabled,
         require_lidar,
     )
 
@@ -792,6 +786,38 @@ def run_l3_ground_lab(
             params,
             progress,
         )
+
+    # Dense R19+ context records every measured return. Use that complete,
+    # order-independent population to decide whether return structure is useful.
+    if all(
+        hasattr(context, name)
+        for name in (
+            "return_last_multi_count",
+            "return_first_multi_count",
+            "return_intermediate_count",
+            "measured_point_count",
+        )
+    ):
+        multi_count = int(np.sum(context.return_last_multi_count, dtype=np.int64))
+        multi_count += int(np.sum(context.return_first_multi_count, dtype=np.int64))
+        multi_count += int(np.sum(context.return_intermediate_count, dtype=np.int64))
+        measured_count = int(context.measured_point_count)
+        return_evidence_enabled = (
+            measured_count > 0
+            and (multi_count / measured_count) >= 0.01
+        )
+    elif require_lidar:
+        # Legacy L3 modes keep their previous diagnostic source behavior.
+        return_evidence_enabled = bool(
+            inspection.has_returns
+            and inspection.max_number_of_returns > 1
+            and inspection.multi_return_fraction >= 0.01
+        )
+    LOGGER.info(
+        "%s_RETURN_EVIDENCE enabled=%s",
+        revision_label,
+        return_evidence_enabled,
+    )
 
     spacing = max(
         float(
