@@ -12,7 +12,9 @@ from ..classifiers.l3_dense_ground import run_l3_dense_ground
 from ..classifiers.l3_inverted_ground import run_l3_inverted_ground
 from ..classifiers.l3_mantle_veto import run_l3_mantle_veto
 from ..classifiers.l3_ground_continuity import run_l3_ground_continuity
+from ..classifiers.universal_ground import run_universal_ground
 from ..terrain.mantle_export import export_mantle_diagnostic
+from ..terrain.mdt_export import export_ground_mdt
 from ..classifiers.l3_ground_lab import run_l3_ground_lab
 from ..classifiers.smrf import SMRFParams, SMRFResult, run_smrf
 from ..ground.ground_export import export_ground_only
@@ -90,7 +92,11 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "L3 Ground Continuity R20.3":
+            if self.engine_name == "Universal Ground R20.4":
+                result = run_universal_ground(
+                    self.cloud, self.params, callback,
+                )
+            elif self.engine_name == "L3 Ground Continuity R20.3":
                 result = run_l3_ground_continuity(
                     self.cloud, self.params, callback,
                     source_override=self.source_override,
@@ -259,3 +265,43 @@ class MantleExportWorker(QThread):
             self.failed.emit(str(exc))
             return
         self.completed.emit(str(path))
+
+
+class MDTExportWorker(QThread):
+    """Create R20.4 MDT + observation-state raster from current Ground model."""
+
+    completed = Signal(object)
+    failed = Signal(str)
+    progress_changed = Signal(int, str)
+
+    def __init__(
+        self,
+        source_path: Path,
+        output_path: Path,
+        result,
+        resolution_m: float = 0.25,
+        max_gap_m: float = 0.75,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.source_path = Path(source_path)
+        self.output_path = Path(output_path)
+        self.result = result
+        self.resolution_m = float(resolution_m)
+        self.max_gap_m = float(max_gap_m)
+
+    def run(self) -> None:
+        try:
+            info = export_ground_mdt(
+                self.source_path,
+                self.output_path,
+                self.result.model,
+                lambda percent, message: self.progress_changed.emit(percent, message),
+                resolution_m=self.resolution_m,
+                max_gap_m=self.max_gap_m,
+            )
+        except Exception as exc:
+            LOGGER.exception("R20.4 MDT export failed")
+            self.failed.emit(str(exc))
+            return
+        self.completed.emit(info)
