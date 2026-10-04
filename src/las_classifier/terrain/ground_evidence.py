@@ -188,8 +188,13 @@ class GroundEvidenceScorer:
         return_number: np.ndarray | None,
         number_of_returns: np.ndarray | None,
         count: int,
+        *,
+        enabled: bool = True,
     ) -> np.ndarray:
-        if return_number is None or number_of_returns is None:
+        # Return structure is optional evidence, never a requirement.  In
+        # photogrammetric/single-return clouds 1/1 is acquisition metadata, not
+        # proof that a pulse penetrated vegetation to terrain, so keep it neutral.
+        if not enabled or return_number is None or number_of_returns is None:
             return np.full(count, 0.50, dtype=np.float64)
 
         rn = np.asarray(return_number, dtype=np.int16)
@@ -229,6 +234,7 @@ class GroundEvidenceScorer:
         invalid_mask: np.ndarray | None = None,
         source_noise_mask: np.ndarray | None = None,
         spatial_presence: np.ndarray | None = None,
+        use_return_evidence: bool = True,
     ) -> GroundEvidence:
         ptd = np.asarray(ptd_score, dtype=np.float64)
         count = ptd.shape[0]
@@ -277,6 +283,7 @@ class GroundEvidenceScorer:
             return_number,
             number_of_returns,
             count,
+            enabled=use_return_evidence,
         )
 
         alignment = self._optional_float(
