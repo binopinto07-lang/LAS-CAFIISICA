@@ -80,7 +80,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
-                "Universal Ground R20.5",
+                "Universal Ground R20.5.1",
                 "Universal Ground R20.4",
                 "L3 Ground Continuity R20.3",
                 "L3 Inverted Ground R20.1",
@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Universal Ground R20.5")
+        self.engine_combo.setCurrentText("Universal Ground R20.5.1")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -494,7 +494,7 @@ class MainWindow(QMainWindow):
         engine: str,
     ) -> None:
         measured_l3 = engine in {
-            "Universal Ground R20.5",
+            "Universal Ground R20.5.1",
             "Universal Ground R20.4",
             "L3 Ground Continuity R20.3",
             "L3 Inverted Ground R20.1",
@@ -511,7 +511,7 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setEnabled(
             not measured_l3
         )
-        universal = engine in {"Universal Ground R20.5", "Universal Ground R20.4"}
+        universal = engine in {"Universal Ground R20.5.1", "Universal Ground R20.4"}
         if universal:
             self.source_combo.setCurrentText("Auto detect")
         self.source_combo.setEnabled(not universal)
@@ -573,7 +573,7 @@ class MainWindow(QMainWindow):
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.5" if getattr(result, "engine_name", "") == "Universal Ground R20.5"
+            "MANTO R20.5.1" if getattr(result, "engine_name", "") == "Universal Ground R20.5.1"
             else "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
             else "MANTO R20.3" if getattr(result.model, "continuity", None) is not None
             else "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
@@ -639,10 +639,10 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
-            "Universal Ground R20.5",
+            "Universal Ground R20.5.1",
         }:
             revision = (
-                "R20.5" if engine == "Universal Ground R20.5"
+                "R20.5.1" if engine == "Universal Ground R20.5.1"
                 else "R20.4" if engine == "Universal Ground R20.4"
                 else "R20.3" if engine == "L3 Ground Continuity R20.3"
                 else "R20.2" if engine == "L3 Ground Continuity R20.2"
@@ -676,7 +676,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
-            "Universal Ground R20.5",
+            "Universal Ground R20.5.1",
         }:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
@@ -692,10 +692,10 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
-            "Universal Ground R20.5",
+            "Universal Ground R20.5.1",
         }:
             lines.extend((
-                f"{'R20.5' if engine == 'Universal Ground R20.5' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
+                f"{'R20.5' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
                 f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
                 f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
@@ -711,7 +711,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
-            "Universal Ground R20.5",
+            "Universal Ground R20.5.1",
         }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
@@ -823,7 +823,7 @@ class MainWindow(QMainWindow):
         self.export_mdt_button.setEnabled(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.5: calcular MDT para pré-visualização...")
+        self._busy(True, "R20.5.1: calcular MDT para pré-visualização...")
         worker = MDTPreviewWorker(
             self._cloud.path,
             self._ground_result,
@@ -861,7 +861,7 @@ class MainWindow(QMainWindow):
         if self._mdt_preview is None or self._mdt_worker is not None:
             return
         source = self._mdt_preview.source
-        suggested = source.with_name(source.stem + "_MDT_R20_5.tif")
+        suggested = source.with_name(source.stem + "_MDT_R20_5_1.tif")
         filename, _ = QFileDialog.getSaveFileName(
             self, "EXPORTAR MDT aprovado", str(suggested),
             "GeoTIFF (*.tif *.tiff)",
@@ -873,7 +873,7 @@ class MainWindow(QMainWindow):
             output = output.with_suffix(".tif")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.5: exportar MDT validado...")
+        self._busy(True, "R20.5.1: exportar MDT validado...")
         worker = MDTExportWorker(
             source,
             output,
@@ -894,7 +894,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"MDT concluído: {info['mdt']}")
         QMessageBox.information(
             self,
-            "LAS-CAFIISICA — MDT R20.5",
+            "LAS-CAFIISICA — MDT R20.5.1",
             "MDT criado:\n"
             + info["mdt"]
             + "\n\nEstado de observação:\n"
@@ -904,7 +904,7 @@ class MainWindow(QMainWindow):
 
     def _mdt_failed(self, message: str) -> None:
         self.statusBar().showMessage("MDT falhou")
-        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.5", message)
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.5.1", message)
 
     def _mdt_finished(self) -> None:
         worker = self._mdt_worker
