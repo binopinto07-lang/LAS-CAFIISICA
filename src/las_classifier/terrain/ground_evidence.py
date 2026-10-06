@@ -34,6 +34,7 @@ PROV_CLOTH_AUX = np.uint16(1 << 8)
 PROV_INVERTED_MANTLE = np.uint16(1 << 9)
 PROV_MANTLE_VETO = np.uint16(1 << 10)
 PROV_GROUND_CONTINUITY = np.uint16(1 << 11)
+PROV_ELEVATED_SURFACE_VETO = np.uint16(1 << 12)
 
 
 @dataclass(frozen=True, slots=True)
