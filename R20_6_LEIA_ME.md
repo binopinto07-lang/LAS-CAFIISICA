@@ -38,12 +38,16 @@ São elegíveis:
 
 1. `mantle.inferred`: células vazias pequenas suportadas pelo manto;
 2. `mantle.possible_no_ground_observation`: existem retornos superiores, mas
-   não existe observação física de Ground.
+   não existe observação física de Ground;
+3. células `mantle.reliable` onde nenhum ponto sobreviveu ao FINAL GROUND
+   medido. Estas são reconstruídas no próprio MANTO para evitar buracos causados
+   por uma decisão pontual demasiado conservadora.
 
 As breaklines nunca são sintetizadas.
 
-Uma célula de telhado/copa não pode ser usada como âncora medida para construir
-Ground escondido. Para `possible_no_ground_observation`, a altura é projetada
+As células de Ground aceite são registadas durante a própria passagem de scoring;
+não é feita uma nova amostragem por índice. Uma célula de telhado/copa não pode
+ser usada como âncora medida para construir Ground escondido. Para `possible_no_ground_observation`, a altura é projetada
 a partir do Ground medido/reliable mais próximo, em vez de copiar simplesmente
 a altura do objeto visível.
 
