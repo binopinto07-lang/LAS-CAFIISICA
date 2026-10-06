@@ -1,4 +1,4 @@
-"""R20.5.1 Ground -> in-memory MDT preview + explicit export provenance."""
+"""R20.6 Ground Complete -> MDT preview with measured/reconstructed provenance."""
 from __future__ import annotations
 
 import json
@@ -15,7 +15,8 @@ LOGGER = logging.getLogger("las_cafiisica.terrain.mdt_export")
 ProgressCallback = Callable[[int, str], None]
 GROUND_CLASS = np.uint8(2)
 OBSERVED_GROUND = np.uint8(1)
-INTERPOLATED_MDT = np.uint8(2)
+RECONSTRUCTED_GROUND = np.uint8(2)
+INTERPOLATED_MDT = np.uint8(3)
 NO_GROUND_OBSERVATION = np.uint8(0)
 
 
@@ -35,24 +36,30 @@ def _classify(model, points, x, y, z) -> np.ndarray:
 
 def fill_small_mdt_gaps(
     elevation: np.ndarray,
-    observed: np.ndarray,
+    support: np.ndarray,
     *,
     resolution_m: float,
     max_gap_m: float,
+    base_state: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Nearest support fills MDT cells only; it never creates measured Ground."""
+    """Fill tiny raster-only gaps without changing Ground provenance."""
     elevation = np.asarray(elevation, dtype=np.float32)
-    observed = np.asarray(observed, dtype=np.bool_)
-    if elevation.shape != observed.shape:
-        raise ValueError("MDT elevation/observation shape mismatch")
+    support = np.asarray(support, dtype=np.bool_)
+    if elevation.shape != support.shape:
+        raise ValueError("MDT elevation/support shape mismatch")
     result = elevation.copy()
-    state = np.full(observed.shape, NO_GROUND_OBSERVATION, dtype=np.uint8)
-    state[observed] = OBSERVED_GROUND
-    if not np.any(observed) or max_gap_m <= 0:
+    if base_state is None:
+        state = np.full(support.shape, NO_GROUND_OBSERVATION, dtype=np.uint8)
+        state[support] = OBSERVED_GROUND
+    else:
+        state = np.asarray(base_state, dtype=np.uint8).copy()
+        if state.shape != support.shape:
+            raise ValueError("MDT state/support shape mismatch")
+    if not np.any(support) or max_gap_m <= 0:
         return result, state
 
-    distance, nearest = distance_transform_edt(~observed, return_indices=True)
-    fill = (~observed) & (distance * float(resolution_m) <= float(max_gap_m))
+    distance, nearest = distance_transform_edt(~support, return_indices=True)
+    fill = (~support) & (distance * float(resolution_m) <= float(max_gap_m))
     if np.any(fill):
         result[fill] = result[tuple(nearest[:, fill])]
         state[fill] = INTERPOLATED_MDT
@@ -71,6 +78,7 @@ class MDTPreview:
     resolution_m: float
     max_gap_m: float
     ground_points: int
+    reconstructed_points: int = 0
 
     def browser_payload(self, max_side: int = 256) -> dict:
         """Bound the viewport mesh size, independent of the full raster size."""
@@ -113,7 +121,7 @@ def build_ground_mdt_preview(
     with laspy.open(source) as reader:
         crs = reader.header.parse_crs()
         if crs is None or crs.to_epsg() != 3763:
-            raise ValueError("R20.5.1 MDT requires declared EPSG:3763")
+            raise ValueError("R20.6 MDT requires declared EPSG:3763")
         xmin, ymin, _ = map(float, reader.header.mins)
         xmax, ymax, _ = map(float, reader.header.maxs)
         width = max(1, int(np.floor((xmax - xmin) / resolution_m)) + 1)
@@ -153,18 +161,65 @@ def build_ground_mdt_preview(
             if progress is not None and total:
                 progress(
                     int(75 * processed / total),
-                    f"R20.5.1 MDT: Ground {processed:,}/{total:,}",
+                    f"R20.6 MDT: Ground {processed:,}/{total:,}",
                 )
 
-    count2 = count.reshape(height, width)
-    observed = count2 > 0
-    if not np.any(observed):
+    measured_count = count.reshape(height, width)
+    measured = measured_count > 0
+    measured_sum = z_sum.reshape(height, width)
+
+    synthetic_sum = np.zeros(cells, dtype=np.float64)
+    synthetic_count = np.zeros(cells, dtype=np.uint32)
+    reconstructed_points = 0
+    iterator = getattr(model, "iter_synthetic_fill_xyz", None)
+    if iterator is not None:
+        for sx, sy, sz in iterator():
+            sx = np.asarray(sx, dtype=np.float64)
+            sy = np.asarray(sy, dtype=np.float64)
+            sz = np.asarray(sz, dtype=np.float64)
+            valid = np.isfinite(sx) & np.isfinite(sy) & np.isfinite(sz)
+            if not np.any(valid):
+                continue
+            col = np.floor((sx[valid] - xmin) / resolution_m).astype(np.int64)
+            row = np.floor((ymax - sy[valid]) / resolution_m).astype(np.int64)
+            inside = (
+                (col >= 0) & (col < width)
+                & (row >= 0) & (row < height)
+            )
+            if not np.any(inside):
+                continue
+            col = col[inside]
+            row = row[inside]
+            zz = sz[valid][inside]
+            flat = row * width + col
+            synthetic_sum += np.bincount(flat, weights=zz, minlength=cells)
+            synthetic_count += np.bincount(flat, minlength=cells).astype(np.uint32)
+            reconstructed_points += int(flat.size)
+
+    reconstructed_count = synthetic_count.reshape(height, width)
+    reconstructed = (reconstructed_count > 0) & ~measured
+    reconstructed_sum = synthetic_sum.reshape(height, width)
+    support = measured | reconstructed
+    if not np.any(support):
         raise ValueError("Current Ground model produced no MDT support cells")
+
     elevation = np.full((height, width), np.nan, dtype=np.float32)
-    sum2 = z_sum.reshape(height, width)
-    elevation[observed] = (sum2[observed] / count2[observed]).astype(np.float32)
+    elevation[measured] = (
+        measured_sum[measured] / measured_count[measured]
+    ).astype(np.float32)
+    elevation[reconstructed] = (
+        reconstructed_sum[reconstructed] / reconstructed_count[reconstructed]
+    ).astype(np.float32)
+
+    state = np.full((height, width), NO_GROUND_OBSERVATION, dtype=np.uint8)
+    state[measured] = OBSERVED_GROUND
+    state[reconstructed] = RECONSTRUCTED_GROUND
     elevation, state = fill_small_mdt_gaps(
-        elevation, observed, resolution_m=resolution_m, max_gap_m=max_gap_m
+        elevation,
+        support,
+        resolution_m=resolution_m,
+        max_gap_m=max_gap_m,
+        base_state=state,
     )
 
     return MDTPreview(
@@ -176,6 +231,7 @@ def build_ground_mdt_preview(
         resolution_m=resolution_m,
         max_gap_m=max_gap_m,
         ground_points=ground_points,
+        reconstructed_points=reconstructed_points,
     )
 
 
@@ -189,7 +245,7 @@ def write_ground_mdt(
         import rasterio
         from rasterio.transform import from_origin
     except ImportError as exc:
-        raise RuntimeError("R20.5.1 MDT export requires rasterio") from exc
+        raise RuntimeError("R20.6 MDT export requires rasterio") from exc
 
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() not in {".tif", ".tiff"}:
@@ -212,7 +268,7 @@ def write_ground_mdt(
         "compress": "deflate", "tiled": True,
     }
     if progress is not None:
-        progress(50, "R20.5.1 MDT: escrever GeoTIFF")
+        progress(50, "R20.6 MDT: escrever GeoTIFF")
     with rasterio.open(output, "w", **profile) as dst:
         dst.write(
             np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32),
@@ -221,16 +277,18 @@ def write_ground_mdt(
         dst.set_band_description(1, "MDT elevation metres")
 
     if progress is not None:
-        progress(75, "R20.5.1 MDT: escrever mapa Observado/Interpolado")
+        progress(75, "R20.6 MDT: escrever mapa Observado/Interpolado")
     state_profile = dict(profile, dtype="uint8", nodata=255)
     with rasterio.open(state_path, "w", **state_profile) as dst:
         dst.write(state.astype(np.uint8), 1)
         dst.set_band_description(
-            1, "0=NO_GROUND_OBSERVATION;1=MEASURED_GROUND;2=INTERPOLATED_MDT"
+            1,
+            "0=NO_GROUND_OBSERVATION;1=MEASURED_GROUND;"
+            "2=RECONSTRUCTED_GROUND;3=INTERPOLATED_MDT",
         )
 
     result = {
-        "algorithm": "LAS_CAFIISICA_MDT_R20_5_1",
+        "algorithm": "LAS_CAFIISICA_MDT_R20_6",
         "source": str(preview.source),
         "mdt": str(output),
         "observation_state": str(state_path),
@@ -238,17 +296,20 @@ def write_ground_mdt(
         "resolution_m": float(preview.resolution_m),
         "max_gap_m": float(preview.max_gap_m),
         "ground_points": int(preview.ground_points),
+        "reconstructed_points": int(preview.reconstructed_points),
         "observed_cells": int(np.count_nonzero(state == OBSERVED_GROUND)),
+        "reconstructed_cells": int(np.count_nonzero(state == RECONSTRUCTED_GROUND)),
         "interpolated_cells": int(np.count_nonzero(state == INTERPOLATED_MDT)),
         "no_ground_observation_cells": int(np.count_nonzero(state == NO_GROUND_OBSERVATION)),
+        "reconstructed_is_measured_ground": False,
         "interpolated_is_measured_ground": False,
     }
     report_path.write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    LOGGER.info("R20_5_MDT=%s", output)
+    LOGGER.info("R20_6_MDT=%s", output)
     if progress is not None:
-        progress(100, "R20.5.1 MDT exportado")
+        progress(100, "R20.6 MDT exportado")
     return result
 
 
