@@ -256,8 +256,15 @@
           continue;
         }
         if (mode === "observation") {
-          if (data.state[i] === 1) colors.setXYZ(i, 0.20, 0.74, 0.33);
-          else colors.setXYZ(i, 0.95, 0.68, 0.22);
+          if (data.state[i] === 1) {
+            colors.setXYZ(i, 0.20, 0.74, 0.33); // measured Ground
+          } else if (data.state[i] === 2) {
+            colors.setXYZ(i, 0.20, 0.65, 0.95); // reconstructed Ground
+          } else if (data.state[i] === 3) {
+            colors.setXYZ(i, 0.95, 0.68, 0.22); // raster-only interpolation
+          } else {
+            colors.setXYZ(i, 0, 0, 0);
+          }
         } else if (mode === "hillshade") {
           const dx = (zAt(r, c + 1, z) - zAt(r, c - 1, z)) / (2 * data.resolution_m);
           const dy = (zAt(r - 1, c, z) - zAt(r + 1, c, z)) / (2 * data.resolution_m);
@@ -272,7 +279,7 @@
     }
     colors.needsUpdate = true;
     state.mdtColorMode = mode;
-    status("MDT R20.5.1 · " + mode + " · verde=medido / amarelo=interpolado na vista Observação");
+    status("MDT R20.6 · " + mode + " · verde=medido / azul=reconstruído / amarelo=interpolado");
   }
 
   function showMDTPreview(data) {
@@ -283,7 +290,7 @@
     state.viewer.scene.scene.add(state.mdtMesh);
     setMDTColorMode("elevation");
     setViewMode("mdt");
-    status("MDT R20.5.1 calculado em memória · pré-visualização 3D · exportação pendente");
+    status("MDT R20.6 calculado em memória · pré-visualização 3D · exportação pendente");
   }
 
   function applyViewMode() {
