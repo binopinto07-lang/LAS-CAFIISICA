@@ -36,7 +36,9 @@ def test_r2051_comparator_never_requires_lidar(monkeypatch):
     assert universal_ground.run_universal_ground_r2051(object()) == "ok"
     assert captured["require_lidar"] is False
     assert captured["source_override"] is None
-    assert captured["revision_label"] == "R20.5.1"\n    assert universal_ground.ENGINE_NAME == "Universal Ground R20.6"\n    assert universal_ground.REVISION == "R20.6"
+    assert captured["revision_label"] == "R20.5.1"
+    assert universal_ground.ENGINE_NAME == "Universal Ground R20.6"
+    assert universal_ground.REVISION == "R20.6"
 
 
 def test_r204_comparator_keeps_previous_revision(monkeypatch):
