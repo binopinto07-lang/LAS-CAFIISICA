@@ -132,3 +132,36 @@ def test_reconstruction_does_not_mutate_preserved_mantle():
     np.testing.assert_array_equal(
         mantle.possible_no_ground_observation, before_hidden
     )
+
+
+def test_r20_6_reconstructs_reliable_cells_without_accepted_ground():
+    mantle = _mantle()
+    measured = np.ones((5, 5), dtype=bool)
+    measured[1, 1] = False
+
+    reconstruction = build_mantle_ground_reconstruction(
+        mantle,
+        measured_ground_cells=measured,
+        spacing_m=0.25,
+        max_points=1000,
+    )
+
+    assert reconstruction.fill_mask[1, 1]
+    assert reconstruction.source_state[1, 1] == 3
+    assert reconstruction.reliable_missing_cell_count == 1
+
+
+def test_r20_6_uses_only_accepted_measured_ground_as_projection_anchor():
+    mantle = _mantle()
+    measured = np.zeros((5, 5), dtype=bool)
+    measured[2, 1] = True
+    mantle.reliable[:] = False
+    mantle.reliable[2, 1] = True
+    mantle.reliable[2, 2] = True
+
+    reconstruction = build_mantle_ground_reconstruction(
+        mantle,
+        measured_ground_cells=measured,
+        spacing_m=0.25,
+    )
+    assert reconstruction.fill_mask[2, 2]
