@@ -692,9 +692,10 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
+            "Universal Ground R20.5",
         }:
             lines.extend((
-                f"{'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
+                f"{'R20.5' if engine == 'Universal Ground R20.5' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
                 f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
                 f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
@@ -710,6 +711,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
+            "Universal Ground R20.5",
         }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
