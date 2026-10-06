@@ -1,8 +1,8 @@
 {
   "id": "las_cafiisica_ground_v2",
-  "name": "LAS-CAFIISICA — R20.6.1 GROUND COMPLETE + MANTO RECONSTRUCTION + MDT PREVIEW",
+  "name": "LAS-CAFIISICA — R20.6.2 GROUND COMPLETE + STRONG VETO + FAST MDT",
   "repo_url": "https://github.com/binopinto07-lang/LAS-CAFIISICA.git",
-  "branch": "r20-6-ground-complete",
+  "branch": "r20-6-2-ground-complete-veto-mdt",
   "python_version": "3.12",
   "dist_dir_name": "LAS_CAFIISICA",
   "checks": [
@@ -33,7 +33,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_1'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_2_2'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -55,8 +55,8 @@
         "venv": "test"
       },
       {
-        "id": "pytest-r20-6",
-        "name": "Testar R20.6.1 Ground Complete + MDT + manto preservado",
+        "id": "pytest-r20-6-2",
+        "name": "Testar R20.6.2 veto reforçado + Ground Complete + FAST MDT",
         "command": "$env:QT_QPA_PLATFORM='offscreen'; & '%PYTHON%' -m pytest -q tests/test_r20_6_ground_complete.py tests/test_r20_5_1_preserve_mantle.py tests/test_r20_5_elevated_guard.py tests/test_r20_5_mdt_preview.py tests/test_r20_5_build_contract.py tests/test_r20_5_localbuild_source_guard.py tests/test_r20_4_universal_ground.py tests/test_viewer_camera_state.py tests/test_viewer_converter.py",
         "timeout_minutes": 15,
         "category": "test",
@@ -84,7 +84,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_1'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_2_2'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -150,7 +150,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_1'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_2_2'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -172,8 +172,8 @@
         "venv": "test"
       },
       {
-        "id": "pytest-r20-6",
-        "name": "Testar R20.6.1 Ground Complete + MDT + manto preservado",
+        "id": "pytest-r20-6-2",
+        "name": "Testar R20.6.2 veto reforçado + Ground Complete + FAST MDT",
         "command": "$env:QT_QPA_PLATFORM='offscreen'; & '%PYTHON%' -m pytest -q tests/test_r20_6_ground_complete.py tests/test_r20_5_1_preserve_mantle.py tests/test_r20_5_elevated_guard.py tests/test_r20_5_mdt_preview.py tests/test_r20_5_build_contract.py tests/test_r20_5_localbuild_source_guard.py tests/test_r20_4_universal_ground.py tests/test_viewer_camera_state.py tests/test_viewer_converter.py",
         "timeout_minutes": 15,
         "category": "test",
@@ -255,7 +255,7 @@
     ]
   },
   "release": {},
-  "config_revision": 52,
+  "config_revision": 53,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -369,11 +369,12 @@
     "R20_5_1_LEIA_ME.md",
     "src/las_classifier/terrain/mantle_reconstruction.py",
     "tests/test_r20_6_ground_complete.py",
-    "R20_6_LEIA_ME.md"
+    "R20_6_LEIA_ME.md",
+    "R20_6_2_LEIA_ME.md"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
-    "value": "LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_1"
+    "value": "LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_2"
   },
   "auto_bootstrap_python": true
 }
