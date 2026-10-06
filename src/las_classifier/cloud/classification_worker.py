@@ -12,7 +12,7 @@ from ..classifiers.l3_dense_ground import run_l3_dense_ground
 from ..classifiers.l3_inverted_ground import run_l3_inverted_ground
 from ..classifiers.l3_mantle_veto import run_l3_mantle_veto
 from ..classifiers.l3_ground_continuity import run_l3_ground_continuity
-from ..classifiers.universal_ground import run_universal_ground
+from ..classifiers.universal_ground import run_universal_ground, run_universal_ground_r204
 from ..terrain.mantle_export import export_mantle_diagnostic
 from ..terrain.mdt_export import export_ground_mdt, build_ground_mdt_preview
 from ..classifiers.l3_ground_lab import run_l3_ground_lab
@@ -92,9 +92,11 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name in {"Universal Ground R20.5", "Universal Ground R20.4"}:
-                result = run_universal_ground(
-                    self.cloud, self.params, callback,
+            if self.engine_name == "Universal Ground R20.5":
+                result = run_universal_ground(self.cloud, self.params, callback)
+            elif self.engine_name == "Universal Ground R20.4":
+                result = run_universal_ground_r204(
+                    self.cloud, self.params, callback
                 )
             elif self.engine_name == "L3 Ground Continuity R20.3":
                 result = run_l3_ground_continuity(
