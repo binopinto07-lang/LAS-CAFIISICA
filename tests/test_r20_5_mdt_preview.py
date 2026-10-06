@@ -55,7 +55,8 @@ def test_preview_is_in_memory_and_user_export_is_separate(tmp_path):
     assert (tmp_path / "ground_mdt_OBSERVATION_STATE.tif").exists()
     assert (tmp_path / "ground_mdt.json").exists()
     assert result["ground_points"] == 5
-    assert result["reconstructed_is_measured_ground"] is False\n    assert result["interpolated_is_measured_ground"] is False
+    assert result["reconstructed_is_measured_ground"] is False
+    assert result["interpolated_is_measured_ground"] is False
 
 
 def test_mdt_raster_does_not_turn_unknown_terrain_into_measured_ground():
