@@ -177,19 +177,37 @@ def build_mantle_ground_reconstruction(
         breakline = np.asarray(breakline, dtype=np.bool_).reshape(shape)
 
     guard = getattr(mantle, "veto_guard", None)
-    anchor = reliable & measured_ground & np.isfinite(surface) & ~breakline
+    elevated = np.zeros(shape, dtype=np.bool_)
     if guard is not None:
-        # Elevated candidate cells may need reconstruction, but must never act
-        # as measured anchors for that reconstruction.
-        anchor &= ~np.asarray(guard.roof_candidate, dtype=np.bool_)
-        anchor &= ~np.asarray(guard.canopy_candidate, dtype=np.bool_)
+        elevated = (
+            np.asarray(guard.roof_candidate, dtype=np.bool_)
+            | np.asarray(guard.canopy_candidate, dtype=np.bool_)
+        )
+        if elevated.shape != shape:
+            raise ValueError("R20.6 elevated-candidate shape mismatch")
+
+    # If the visible surface itself was flagged as elevated and no accepted
+    # measured Ground survived in that cell, treat it as HIDDEN GROUND. Never
+    # copy the roof/canopy Z into the reconstructed Ground.
+    hidden = hidden | (observed & ~measured_ground & elevated)
+    reliable_missing = reliable & ~measured_ground & ~elevated
+
+    anchor = (
+        reliable
+        & measured_ground
+        & np.isfinite(surface)
+        & ~breakline
+        & ~elevated
+    )
 
     config = MantleReconstructionConfig(
         spacing_m=max(0.05, float(spacing_m)),
         max_points=max(1, int(max_points)),
     )
 
-    fill = (inferred | hidden | reliable_missing) & np.isfinite(surface) & ~breakline
+    fill = (
+        inferred | hidden | reliable_missing
+    ) & np.isfinite(surface) & ~breakline
     out_surface = surface.copy()
     out_sx = np.asarray(mantle.slope_x, dtype=np.float32).copy()
     out_sy = np.asarray(mantle.slope_y, dtype=np.float32).copy()
