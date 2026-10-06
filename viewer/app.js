@@ -434,6 +434,7 @@
   window.LASViewer = {
     loadCloud,
     showMDTPreview,
+    clearMDTPreview: removeMDT,
     setMDTColorMode,
     setViewMode,
     setMaterialMode,
