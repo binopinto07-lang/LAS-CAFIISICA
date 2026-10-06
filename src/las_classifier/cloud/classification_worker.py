@@ -92,7 +92,7 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "Universal Ground R20.4":
+            if self.engine_name in {"Universal Ground R20.5", "Universal Ground R20.4"}:
                 result = run_universal_ground(
                     self.cloud, self.params, callback,
                 )
