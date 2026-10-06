@@ -1,4 +1,4 @@
-"""R20.5 Ground -> in-memory MDT preview + explicit export provenance."""
+"""R20.5.1 Ground -> in-memory MDT preview + explicit export provenance."""
 from __future__ import annotations
 
 import json
@@ -113,7 +113,7 @@ def build_ground_mdt_preview(
     with laspy.open(source) as reader:
         crs = reader.header.parse_crs()
         if crs is None or crs.to_epsg() != 3763:
-            raise ValueError("R20.5 MDT requires declared EPSG:3763")
+            raise ValueError("R20.5.1 MDT requires declared EPSG:3763")
         xmin, ymin, _ = map(float, reader.header.mins)
         xmax, ymax, _ = map(float, reader.header.maxs)
         width = max(1, int(np.floor((xmax - xmin) / resolution_m)) + 1)
@@ -153,7 +153,7 @@ def build_ground_mdt_preview(
             if progress is not None and total:
                 progress(
                     int(75 * processed / total),
-                    f"R20.5 MDT: Ground {processed:,}/{total:,}",
+                    f"R20.5.1 MDT: Ground {processed:,}/{total:,}",
                 )
 
     count2 = count.reshape(height, width)
@@ -189,7 +189,7 @@ def write_ground_mdt(
         import rasterio
         from rasterio.transform import from_origin
     except ImportError as exc:
-        raise RuntimeError("R20.5 MDT export requires rasterio") from exc
+        raise RuntimeError("R20.5.1 MDT export requires rasterio") from exc
 
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() not in {".tif", ".tiff"}:
@@ -212,7 +212,7 @@ def write_ground_mdt(
         "compress": "deflate", "tiled": True,
     }
     if progress is not None:
-        progress(50, "R20.5 MDT: escrever GeoTIFF")
+        progress(50, "R20.5.1 MDT: escrever GeoTIFF")
     with rasterio.open(output, "w", **profile) as dst:
         dst.write(
             np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32),
@@ -221,7 +221,7 @@ def write_ground_mdt(
         dst.set_band_description(1, "MDT elevation metres")
 
     if progress is not None:
-        progress(75, "R20.5 MDT: escrever mapa Observado/Interpolado")
+        progress(75, "R20.5.1 MDT: escrever mapa Observado/Interpolado")
     state_profile = dict(profile, dtype="uint8", nodata=255)
     with rasterio.open(state_path, "w", **state_profile) as dst:
         dst.write(state.astype(np.uint8), 1)
@@ -230,7 +230,7 @@ def write_ground_mdt(
         )
 
     result = {
-        "algorithm": "LAS_CAFIISICA_MDT_R20_5",
+        "algorithm": "LAS_CAFIISICA_MDT_R20_5_1",
         "source": str(preview.source),
         "mdt": str(output),
         "observation_state": str(state_path),
@@ -248,7 +248,7 @@ def write_ground_mdt(
     )
     LOGGER.info("R20_5_MDT=%s", output)
     if progress is not None:
-        progress(100, "R20.5 MDT exportado")
+        progress(100, "R20.5.1 MDT exportado")
     return result
 
 
