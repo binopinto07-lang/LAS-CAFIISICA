@@ -27,8 +27,8 @@ from .l3_mantle_veto import _mantle_with_guard
 
 ProgressCallback = Callable[[int, str], None]
 
-ENGINE_NAME = "Universal Ground R20.6"
-REVISION = "R20.6"
+ENGINE_NAME = "Universal Ground R20.6.2"
+REVISION = "R20.6.2"
 
 
 def _r2051_continuity_builder(context, mantle, progress):
@@ -132,7 +132,7 @@ def run_universal_ground(
     params: GroundEngineParams | None = None,
     progress: ProgressCallback | None = None,
 ) -> L3GroundLabResult:
-    """R20.6 FINAL GROUND = measured Ground + reconstructed NO_GROUND_OBSERVATION.
+    """R20.6.2 FINAL GROUND = measured Ground + reconstructed NO_GROUND_OBSERVATION.
 
     Reconstructed XYZ are never presented as measured observations. They are
     emitted through the existing synthetic Ground channel (GroundSource=2).
@@ -150,9 +150,18 @@ def run_universal_ground(
         if float(requested.synthetic_spacing) > 0.0
         else 0.25
     )
+    final_veto = getattr(
+        getattr(result.model, "continuity", None),
+        "final_veto",
+        None,
+    )
     reconstruction = build_mantle_ground_reconstruction(
         result.model.mantle,
         measured_ground_cells=result.model.measured_ground_cells,
+        elevated_mask=(
+            getattr(final_veto, "blocked", None)
+            if final_veto is not None else None
+        ),
         spacing_m=spacing,
     )
     model = UniversalCompleteGroundModel(
@@ -163,7 +172,7 @@ def run_universal_ground(
     if progress is not None:
         progress(
             100,
-            "R20.6 FINAL GROUND: "
+            "R20.6.2 FINAL GROUND: "
             f"{result.ground_count:,} measured + "
             f"{model.synthetic_fill_point_count:,} reconstructed",
         )
