@@ -1,4 +1,4 @@
-"""R20.5 multiscale geometric veto for elevated islands in universal LAS Ground.
+"""R20.5.1 multiscale geometric veto for elevated islands in universal LAS Ground.
 
 Runs on ALL sources (P1/L3/unknown). It never reads original LAS class labels,
 sensor names or return count. Only measured cell envelopes and local geometry
@@ -62,7 +62,7 @@ def elevated_island_mask(grid, mantle, config: ElevatedGuardConfig | None = None
     shape = (int(grid.ny), int(grid.nx))
     observed = np.asarray(mantle.observed, dtype=np.bool_)
     if observed.shape != shape:
-        raise ValueError("R20.5 evidence / mantle shape mismatch")
+        raise ValueError("R20.5.1 evidence / mantle shape mismatch")
     lower = np.asarray(grid.min_z, dtype=np.float32).reshape(shape)
     upper = np.asarray(grid.max_z, dtype=np.float32).reshape(shape)
     counts = np.asarray(grid.point_count).reshape(shape)
@@ -74,7 +74,7 @@ def elevated_island_mask(grid, mantle, config: ElevatedGuardConfig | None = None
     sx = np.asarray(mantle.slope_x, dtype=np.float32)
     sy = np.asarray(mantle.slope_y, dtype=np.float32)
     if sx.shape != shape or sy.shape != shape:
-        raise ValueError("R20.5 slope-grid shape mismatch")
+        raise ValueError("R20.5.1 slope-grid shape mismatch")
 
     candidate = reliable & (upper - lower <= cfg.max_candidate_cell_spread_m)
     breakline = getattr(mantle, "breakline", None)
@@ -121,7 +121,7 @@ def elevated_island_mask(grid, mantle, config: ElevatedGuardConfig | None = None
 
     blocked = candidate & (ray_votes >= cfg.min_support_rays) & opposed
     LOGGER.info(
-        "R20_5_ELEVATED_ISLAND candidate=%d blocked=%d measured_only=1",
+        "R20_5_1_ELEVATED_ISLAND candidate=%d blocked=%d measured_only=1",
         int(candidate.sum()),
         int(blocked.sum()),
     )
@@ -153,7 +153,7 @@ class ElevatedSurfaceGuard:
         y = np.asarray(y, dtype=np.float64)
         z = np.asarray(z, dtype=np.float64)
         if x.shape != y.shape or x.shape != z.shape:
-            raise ValueError("R20.5 elevated-veto query dimension mismatch")
+            raise ValueError("R20.5.1 elevated-veto query dimension mismatch")
         result = np.zeros(x.shape, dtype=np.bool_)
         finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
         index = np.flatnonzero(finite)
@@ -205,7 +205,7 @@ def apply_elevated_surface_veto(
     invalid = np.asarray(invalid, dtype=np.bool_)
     proposed = guard.point_mask(x, y, z)
     if invalid.shape != proposed.shape:
-        raise ValueError("R20.5 elevated-veto invalid-mask mismatch")
+        raise ValueError("R20.5.1 elevated-veto invalid-mask mismatch")
     accepted = evidence.classifications() == 2
     applied = proposed & accepted & ~invalid
     evidence.decision[applied] = int(GroundDecision.NON_GROUND_OBJECT)
