@@ -205,3 +205,27 @@ def test_elevated_cell_never_becomes_reconstruction_anchor():
         spacing_m=0.25,
     )
     assert reconstruction.point_count == 0
+
+
+def test_final_veto_mask_forces_reconstruction_below_elevated_surface():
+    mantle = _mantle()
+    measured = np.ones((5, 5), dtype=bool)
+    measured[2, 3] = False
+    mantle.reliable[2, 3] = True
+    mantle.observed[2, 3] = True
+    mantle.surface[2, 3] = 109.0
+
+    extra_veto = np.zeros((5, 5), dtype=bool)
+    extra_veto[2, 3] = True
+
+    reconstruction = build_mantle_ground_reconstruction(
+        mantle,
+        measured_ground_cells=measured,
+        elevated_mask=extra_veto,
+        spacing_m=0.25,
+        max_points=1000,
+    )
+
+    assert reconstruction.fill_mask[2, 3]
+    assert reconstruction.source_state[2, 3] == 2
+    assert float(reconstruction.surface[2, 3]) < 108.0
