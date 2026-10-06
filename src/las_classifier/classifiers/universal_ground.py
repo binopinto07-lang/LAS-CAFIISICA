@@ -1,6 +1,6 @@
-"""Universal Ground R20.6 — measured Ground + reconstructed mantle Ground.
+"""Universal Ground R20.6.2 — strengthened measured + reconstructed Ground.
 
-All P1/L3/UNKNOWN sources use the same measured classification pipeline. R20.6
+All P1/L3/UNKNOWN sources use the same measured classification pipeline. R20.6.2
 then adds a SEPARATE synthetic Ground layer only for mantle cells explicitly
 marked NO_GROUND_OBSERVATION. The measured cloud and preserved R20 mantle are
 never rewritten.
@@ -36,7 +36,7 @@ def _r2051_continuity_builder(context, mantle, progress):
     if mantle is None or mantle.veto_guard is None:
         raise RuntimeError("R20.5.1+ requires the preserved guarded R20 mantle")
     if progress is not None:
-        progress(56, "R20.6: object veto + preserved mantle")
+        progress(56, "R20.6.2: object/vertical veto + preserved mantle")
 
     final_veto = build_elevated_surface_guard(context, mantle)
     original_guard = mantle.veto_guard
