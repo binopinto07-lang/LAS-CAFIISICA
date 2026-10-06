@@ -307,7 +307,7 @@ class MDTPreviewWorker(QThread):
 
 
 class MDTExportWorker(QThread):
-    """Create R20.4 MDT + observation-state raster from current Ground model."""
+    """Export reviewed R20.5 MDT + observation-state raster."""
 
     completed = Signal(object)
     failed = Signal(str)
@@ -343,7 +343,7 @@ class MDTExportWorker(QThread):
                 preview=self.preview,
             )
         except Exception as exc:
-            LOGGER.exception("R20.4 MDT export failed")
+            LOGGER.exception("R20.5 MDT export failed")
             self.failed.emit(str(exc))
             return
         self.completed.emit(info)
