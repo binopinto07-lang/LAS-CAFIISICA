@@ -1,4 +1,4 @@
-"""R20.4 Ground -> MDT export with explicit observation provenance."""
+"""R20.5 Ground -> in-memory MDT preview + explicit export provenance."""
 from __future__ import annotations
 
 import json
@@ -113,7 +113,7 @@ def build_ground_mdt_preview(
     with laspy.open(source) as reader:
         crs = reader.header.parse_crs()
         if crs is None or crs.to_epsg() != 3763:
-            raise ValueError("R20.4 MDT requires declared EPSG:3763")
+            raise ValueError("R20.5 MDT requires declared EPSG:3763")
         xmin, ymin, _ = map(float, reader.header.mins)
         xmax, ymax, _ = map(float, reader.header.maxs)
         width = max(1, int(np.floor((xmax - xmin) / resolution_m)) + 1)
@@ -153,7 +153,7 @@ def build_ground_mdt_preview(
             if progress is not None and total:
                 progress(
                     int(75 * processed / total),
-                    f"R20.4 MDT: Ground {processed:,}/{total:,}",
+                    f"R20.5 MDT: Ground {processed:,}/{total:,}",
                 )
 
     count2 = count.reshape(height, width)
