@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -58,37 +59,56 @@ def fill_small_mdt_gaps(
     return result, state
 
 
-def export_ground_mdt(
+@dataclass(slots=True)
+class MDTPreview:
+    """Computed terrain in RAM: no GeoTIFF exists until explicit EXPORT."""
+
+    source: Path
+    elevation: np.ndarray
+    state: np.ndarray
+    xmin: float
+    ymax: float
+    resolution_m: float
+    max_gap_m: float
+    ground_points: int
+
+    def browser_payload(self, max_side: int = 256) -> dict:
+        """Bound the viewport mesh size, independent of the full raster size."""
+        if max_side < 2:
+            raise ValueError("max_side must be >=2")
+        h, w = self.elevation.shape
+        stride = max(1, int(np.ceil(max(h, w) / max_side)))
+        z = self.elevation[::stride, ::stride]
+        state = self.state[::stride, ::stride]
+        # Null, never a fake 0-height terrain vertex, for unknown cells.
+        flat = z.ravel()
+        values = [float(v) if np.isfinite(v) else None for v in flat]
+        return {
+            "width": int(z.shape[1]),
+            "height": int(z.shape[0]),
+            "xmin": self.xmin,
+            "ymax": self.ymax,
+            "resolution_m": self.resolution_m * stride,
+            "z": values,
+            "state": state.ravel().astype(np.uint8).tolist(),
+        }
+
+
+def build_ground_mdt_preview(
     source_path: str | Path,
-    output_path: str | Path,
     model,
     progress: ProgressCallback | None = None,
     *,
     resolution_m: float = 0.25,
     max_gap_m: float = 0.75,
     max_cells: int = 20_000_000,
-) -> dict:
-    """Create a GeoTIFF MDT directly from the current Ground model.
-
-    State 1 is physically measured Ground accepted by the classifier.
-    State 2 is raster-only interpolation and is never written back as LAS Ground.
-    State 0 remains NO_GROUND_OBSERVATION/NoData.
-    """
-    try:
-        import rasterio
-        from rasterio.transform import from_origin
-    except ImportError as exc:
-        raise RuntimeError("R20.4 MDT export requires rasterio") from exc
-
+) -> MDTPreview:
+    """Compute Ground-derived MDT without opening a save dialog or writing files."""
     if resolution_m <= 0 or max_gap_m < 0:
         raise ValueError("Invalid MDT resolution/gap settings")
-
     source = Path(source_path).expanduser().resolve()
-    output = Path(output_path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(source)
-    if output.suffix.lower() not in {".tif", ".tiff"}:
-        raise ValueError("MDT output must be GeoTIFF (.tif/.tiff)")
 
     with laspy.open(source) as reader:
         crs = reader.header.parse_crs()
@@ -147,44 +167,109 @@ def export_ground_mdt(
         elevation, observed, resolution_m=resolution_m, max_gap_m=max_gap_m
     )
 
+    return MDTPreview(
+        source=source,
+        elevation=elevation,
+        state=state,
+        xmin=xmin,
+        ymax=ymax,
+        resolution_m=resolution_m,
+        max_gap_m=max_gap_m,
+        ground_points=ground_points,
+    )
+
+
+def write_ground_mdt(
+    preview: MDTPreview,
+    output_path: str | Path,
+    progress: ProgressCallback | None = None,
+) -> dict:
+    """Export the exact MDT the operator previewed; no recomputation."""
+    try:
+        import rasterio
+        from rasterio.transform import from_origin
+    except ImportError as exc:
+        raise RuntimeError("R20.5 MDT export requires rasterio") from exc
+
+    output = Path(output_path).expanduser().resolve()
+    if output.suffix.lower() not in {".tif", ".tiff"}:
+        raise ValueError("MDT output must be GeoTIFF (.tif/.tiff)")
     output.parent.mkdir(parents=True, exist_ok=True)
     state_path = output.with_name(output.stem + "_OBSERVATION_STATE.tif")
     report_path = output.with_suffix(".json")
+    elevation = preview.elevation
+    state = preview.state
     nodata = np.float32(-9999.0)
-    transform = from_origin(xmin, ymax, resolution_m, resolution_m)
+    transform = from_origin(
+        preview.xmin, preview.ymax,
+        preview.resolution_m, preview.resolution_m,
+    )
     profile = {
-        "driver": "GTiff", "width": width, "height": height, "count": 1,
-        "dtype": "float32", "crs": "EPSG:3763", "transform": transform,
-        "nodata": float(nodata), "compress": "deflate", "tiled": True,
+        "driver": "GTiff", "width": int(elevation.shape[1]),
+        "height": int(elevation.shape[0]), "count": 1,
+        "dtype": "float32", "crs": "EPSG:3763",
+        "transform": transform, "nodata": float(nodata),
+        "compress": "deflate", "tiled": True,
     }
     if progress is not None:
-        progress(82, "R20.4 MDT: escrever GeoTIFF")
+        progress(50, "R20.5 MDT: escrever GeoTIFF")
     with rasterio.open(output, "w", **profile) as dst:
-        dst.write(np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32), 1)
+        dst.write(
+            np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32),
+            1,
+        )
         dst.set_band_description(1, "MDT elevation metres")
 
-    state_profile = dict(profile)
-    state_profile.update(dtype="uint8", nodata=255)
+    if progress is not None:
+        progress(75, "R20.5 MDT: escrever mapa Observado/Interpolado")
+    state_profile = dict(profile, dtype="uint8", nodata=255)
     with rasterio.open(state_path, "w", **state_profile) as dst:
         dst.write(state.astype(np.uint8), 1)
-        dst.set_band_description(1, "0=NO_GROUND_OBSERVATION;1=MEASURED_GROUND;2=INTERPOLATED_MDT")
+        dst.set_band_description(
+            1, "0=NO_GROUND_OBSERVATION;1=MEASURED_GROUND;2=INTERPOLATED_MDT"
+        )
 
     result = {
-        "algorithm": "LAS_CAFIISICA_MDT_R20_4",
-        "source": str(source),
+        "algorithm": "LAS_CAFIISICA_MDT_R20_5",
+        "source": str(preview.source),
         "mdt": str(output),
         "observation_state": str(state_path),
         "crs": "EPSG:3763",
-        "resolution_m": float(resolution_m),
-        "max_gap_m": float(max_gap_m),
-        "ground_points": int(ground_points),
+        "resolution_m": float(preview.resolution_m),
+        "max_gap_m": float(preview.max_gap_m),
+        "ground_points": int(preview.ground_points),
         "observed_cells": int(np.count_nonzero(state == OBSERVED_GROUND)),
         "interpolated_cells": int(np.count_nonzero(state == INTERPOLATED_MDT)),
         "no_ground_observation_cells": int(np.count_nonzero(state == NO_GROUND_OBSERVATION)),
         "interpolated_is_measured_ground": False,
     }
-    report_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-    LOGGER.info("R20_4_MDT=%s", output)
+    report_path.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    LOGGER.info("R20_5_MDT=%s", output)
     if progress is not None:
-        progress(100, "R20.4 MDT concluído")
+        progress(100, "R20.5 MDT exportado")
     return result
+
+
+def export_ground_mdt(
+    source_path: str | Path,
+    output_path: str | Path,
+    model,
+    progress: ProgressCallback | None = None,
+    *,
+    resolution_m: float = 0.25,
+    max_gap_m: float = 0.75,
+    max_cells: int = 20_000_000,
+    preview: MDTPreview | None = None,
+) -> dict:
+    """Compatibility API; optionally export a previously previewed MDT."""
+    if preview is None:
+        preview = build_ground_mdt_preview(
+            source_path, model, progress,
+            resolution_m=resolution_m, max_gap_m=max_gap_m,
+            max_cells=max_cells,
+        )
+    elif Path(source_path).resolve() != preview.source:
+        raise ValueError("Preview belongs to another LAS source")
+    return write_ground_mdt(preview, output_path, progress)
