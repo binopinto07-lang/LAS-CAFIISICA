@@ -31,6 +31,10 @@ class ElevatedGuardConfig:
     distances_m: tuple[float, ...] = (2.0, 4.0, 7.0)
     max_reference_gradient: float = 3.0
     max_candidate_cell_spread_m: float = 2.75
+    min_vertical_structure_normal_spread_m: float = 0.32
+    strong_vertical_structure_normal_spread_m: float = 0.60
+    min_roughness_normal_m: float = 0.18
+    min_rough_neighbours: int = 3
 
 
 def _shift(array: np.ndarray, dy: int, dx: int, fill: float) -> np.ndarray:
@@ -43,6 +47,76 @@ def _shift(array: np.ndarray, dy: int, dx: int, fill: float) -> np.ndarray:
     x0, x1 = max(0, -dx), w - max(0, dx)
     result[y0:y1, x0:x1] = array[y0 + dy:y1 + dy, x0 + dx:x1 + dx]
     return result
+
+
+def vertical_structure_mask(
+    grid,
+    mantle,
+    config: ElevatedGuardConfig | None = None,
+) -> np.ndarray:
+    """Reject rough vertical structure without confusing a steep terrain plane.
+
+    A true talude can have a large global Z range inside one XY cell. Therefore
+    cell spread is divided by the local plane scale sqrt(1+sx²+sy²). Vegetation
+    and above-ground clutter still tend to retain a large *normal* thickness
+    and disagree with several neighbouring tangent-plane predictions.
+    """
+    cfg = config or ElevatedGuardConfig()
+    shape = (int(grid.ny), int(grid.nx))
+    lower = np.asarray(grid.min_z, dtype=np.float32).reshape(shape)
+    upper = np.asarray(grid.max_z, dtype=np.float32).reshape(shape)
+    counts = np.asarray(grid.point_count).reshape(shape)
+    observed = np.asarray(mantle.observed, dtype=np.bool_).reshape(shape)
+    sx = np.asarray(mantle.slope_x, dtype=np.float32).reshape(shape)
+    sy = np.asarray(mantle.slope_y, dtype=np.float32).reshape(shape)
+    plane_scale = np.sqrt(1.0 + sx * sx + sy * sy)
+    normal_spread = (upper - lower) / np.maximum(plane_scale, 1.0)
+
+    candidate = (
+        observed
+        & np.isfinite(lower)
+        & np.isfinite(upper)
+        & (counts >= cfg.min_support_returns)
+        & np.isfinite(normal_spread)
+        & (normal_spread >= cfg.min_vertical_structure_normal_spread_m)
+    )
+    breakline = getattr(mantle, "breakline", None)
+    if breakline is not None:
+        candidate &= ~np.asarray(breakline, dtype=np.bool_).reshape(shape)
+
+    rough_votes = np.zeros(shape, dtype=np.uint8)
+    cell = float(grid.cell_size)
+    for dy, dx in _DIRECTIONS:
+        neighbour_z = _shift(lower, dy, dx, np.float32(np.nan))
+        neighbour_sx = _shift(sx, dy, dx, np.float32(np.nan))
+        neighbour_sy = _shift(sy, dy, dx, np.float32(np.nan))
+        neighbour_obs = _shift(observed, dy, dx, False)
+        projection = (
+            neighbour_z
+            - neighbour_sx * (dx * cell)
+            - neighbour_sy * (dy * cell)
+        )
+        neighbour_scale = np.sqrt(
+            1.0 + neighbour_sx * neighbour_sx + neighbour_sy * neighbour_sy
+        )
+        residual = np.abs(lower - projection) / np.maximum(neighbour_scale, 1.0)
+        rough_votes += (
+            candidate
+            & neighbour_obs
+            & np.isfinite(residual)
+            & (residual >= cfg.min_roughness_normal_m)
+        ).astype(np.uint8)
+
+    blocked = candidate & (
+        (normal_spread >= cfg.strong_vertical_structure_normal_spread_m)
+        | (rough_votes >= cfg.min_rough_neighbours)
+    )
+    LOGGER.info(
+        "R20_6_2_VERTICAL_STRUCTURE candidate=%d blocked=%d",
+        int(candidate.sum()),
+        int(blocked.sum()),
+    )
+    return blocked
 
 
 def elevated_island_mask(grid, mantle, config: ElevatedGuardConfig | None = None) -> np.ndarray:
@@ -176,7 +250,10 @@ def build_elevated_surface_guard(
     mantle,
     config: ElevatedGuardConfig | None = None,
 ) -> ElevatedSurfaceGuard:
-    blocked = elevated_island_mask(grid, mantle, config)
+    blocked = (
+        elevated_island_mask(grid, mantle, config)
+        | vertical_structure_mask(grid, mantle, config)
+    )
     return ElevatedSurfaceGuard(
         origin=np.asarray(mantle.origin, dtype=np.float64).copy(),
         cell_size=float(grid.cell_size),
