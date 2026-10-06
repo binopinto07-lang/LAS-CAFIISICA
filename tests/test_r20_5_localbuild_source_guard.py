@@ -21,7 +21,7 @@ def test_localbuild_source_guard_matches_source_revision():
 
     for cfg in (root, bundled):
         assert cfg["branch"] == "r20-6-2-ground-complete-veto-mdt"
-        assert int(cfg["config_revision"]) >= 53
+        assert int(cfg["config_revision"]) >= 54
         guard = cfg["required_source_revision"]
         assert guard["path"] == "localbuild/SOURCE_REVISION.txt"
         assert guard["value"] == EXPECTED
@@ -30,7 +30,8 @@ def test_localbuild_source_guard_matches_source_revision():
             step for step in cfg["pipelines"]["test"]
             if step["id"] == "verify-ground-v2-source"
         )
-        assert EXPECTED in verify["command"]
+        assert f"$expected='{EXPECTED}';" in verify["command"]
+        assert EXPECTED + "_2" not in verify["command"]
 
 
 def test_root_and_bundled_profiles_require_same_revision():
