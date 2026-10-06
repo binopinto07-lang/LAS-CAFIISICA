@@ -1,11 +1,9 @@
-"""R20.5.1 universal Ground engine.
+"""Universal Ground R20.6 — measured Ground + reconstructed mantle Ground.
 
-P1 photogrammetry, L3/LiDAR and UNKNOWN LAS/LAZ sources execute the same
-R20.3 geometry pipeline: PTD -> dense evidence -> inverted mantle -> object
-veto -> breakline-safe measured-ground continuity.
-
-Sensor identity never selects a different algorithm. Optional LAS dimensions
-may contribute evidence only when their measured values are informative.
+All P1/L3/UNKNOWN sources use the same measured classification pipeline. R20.6
+then adds a SEPARATE synthetic Ground layer only for mantle cells explicitly
+marked NO_GROUND_OBSERVATION. The measured cloud and preserved R20 mantle are
+never rewritten.
 """
 from __future__ import annotations
 
@@ -16,31 +14,29 @@ import numpy as np
 
 from ..cloud.model import CloudModel
 from ..ground.types import GroundEngineParams
+from ..terrain.elevated_surface_guard import build_elevated_surface_guard
+from ..terrain.ground_continuity import build_ground_continuity
+from ..terrain.mantle_reconstruction import (
+    MantleGroundReconstruction,
+    build_mantle_ground_reconstruction,
+)
+from .l3_ground_continuity import _continuity_builder
 from .l3_ground_lab import L3GroundLabResult, run_l3_ground_lab
 from .l3_inverted_ground import _dense_context
 from .l3_mantle_veto import _mantle_with_guard
-from .l3_ground_continuity import _continuity_builder
-from ..terrain.elevated_surface_guard import build_elevated_surface_guard
-from ..terrain.ground_continuity import build_ground_continuity
 
 ProgressCallback = Callable[[int, str], None]
 
-ENGINE_NAME = "Universal Ground R20.5.1"
-REVISION = "R20.5.1"
+ENGINE_NAME = "Universal Ground R20.6"
+REVISION = "R20.6"
 
 
 def _r2051_continuity_builder(context, mantle, progress):
-    """Block elevated islands in continuity WITHOUT changing the R20 mantle.
-
-    The mantle and its original R20.1 veto remain byte-for-byte independent.
-    R20.5.1 creates a separate final veto, then builds continuity with a
-    temporary combined guard. This prevents an elevated object from becoming a
-    propagation bridge while keeping MANTO diagnostics identical to R20.4.
-    """
+    """Preserve the R20.4 mantle while blocking elevated islands in FINAL Ground."""
     if mantle is None or mantle.veto_guard is None:
-        raise RuntimeError("R20.5.1 requires the preserved guarded R20 mantle")
+        raise RuntimeError("R20.5.1+ requires the preserved guarded R20 mantle")
     if progress is not None:
-        progress(56, "R20.5.1: final-object veto + preserved mantle")
+        progress(56, "R20.6: object veto + preserved mantle")
 
     final_veto = build_elevated_surface_guard(context, mantle)
     original_guard = mantle.veto_guard
@@ -51,27 +47,67 @@ def _r2051_continuity_builder(context, mantle, progress):
             | final_veto.blocked
         ),
     )
-    continuity = build_ground_continuity(
-        context,
-        mantle,
-        combined_guard,
-    )
+    continuity = build_ground_continuity(context, mantle, combined_guard)
     continuity.final_veto = final_veto
     return continuity
 
 
+class UniversalCompleteGroundModel:
+    """Delegate measured classification and expose reconstructed Ground separately."""
 
-def run_universal_ground(
+    def __init__(
+        self,
+        base_model,
+        reconstruction: MantleGroundReconstruction,
+        *,
+        spacing_m: float,
+    ) -> None:
+        self.base_model = base_model
+        self.reconstruction = reconstruction
+        self.engine_name = ENGINE_NAME
+        self.params = replace(
+            base_model.params,
+            synthetic_spacing=float(spacing_m),
+        )
+
+    def __getattr__(self, name):
+        return getattr(self.base_model, name)
+
+    @property
+    def synthetic_fill_point_count(self) -> int:
+        return int(self.reconstruction.point_count)
+
+    @property
+    def effective_fill_spacing(self) -> float:
+        return float(self.reconstruction.effective_spacing)
+
+    @property
+    def reconstructed_cell_count(self) -> int:
+        return int(self.reconstruction.fill_cell_count)
+
+    @property
+    def reconstructed_inferred_cell_count(self) -> int:
+        return int(self.reconstruction.inferred_cell_count)
+
+    @property
+    def reconstructed_hidden_cell_count(self) -> int:
+        return int(self.reconstruction.hidden_ground_cell_count)
+
+    def iter_synthetic_fill_xyz(self, chunk_points: int = 500_000):
+        yield from self.reconstruction.iter_xyz(chunk_points=chunk_points)
+
+    def iter_viewer_synthetic_fill_xyz(self, chunk_points: int = 500_000):
+        yield from self.reconstruction.iter_xyz(chunk_points=chunk_points)
+
+
+def _run_measured(
     cloud: CloudModel,
-    params: GroundEngineParams | None = None,
-    progress: ProgressCallback | None = None,
+    params: GroundEngineParams | None,
+    progress: ProgressCallback | None,
+    *,
+    engine_name: str,
+    revision_label: str,
 ) -> L3GroundLabResult:
-    """Run one geometry-first procedure for every supported point-cloud source.
-
-    P1 is deliberately NOT redirected to a simpler engine.  When no physical
-    Ground point exists below vegetation, R20.5.1 may support an MDT gap later,
-    but this classifier never fabricates that point as measured Ground.
-    """
     return run_l3_ground_lab(
         cloud,
         params,
@@ -80,10 +116,72 @@ def run_universal_ground(
         context_builder=_dense_context,
         mantle_builder=_mantle_with_guard,
         continuity_builder=_r2051_continuity_builder,
-        engine_name=ENGINE_NAME,
-        revision_label=REVISION,
+        engine_name=engine_name,
+        revision_label=revision_label,
         collect_gate_diagnostics=True,
         require_lidar=False,
+    )
+
+
+def run_universal_ground(
+    cloud: CloudModel,
+    params: GroundEngineParams | None = None,
+    progress: ProgressCallback | None = None,
+) -> L3GroundLabResult:
+    """R20.6 FINAL GROUND = measured Ground + reconstructed NO_GROUND_OBSERVATION.
+
+    Reconstructed XYZ are never presented as measured observations. They are
+    emitted through the existing synthetic Ground channel (GroundSource=2).
+    """
+    requested = params or GroundEngineParams()
+    result = _run_measured(
+        cloud,
+        requested,
+        progress,
+        engine_name=ENGINE_NAME,
+        revision_label=REVISION,
+    )
+    spacing = (
+        float(requested.synthetic_spacing)
+        if float(requested.synthetic_spacing) > 0.0
+        else 0.25
+    )
+    reconstruction = build_mantle_ground_reconstruction(
+        result.model.mantle,
+        spacing_m=spacing,
+    )
+    model = UniversalCompleteGroundModel(
+        result.model,
+        reconstruction,
+        spacing_m=reconstruction.effective_spacing,
+    )
+    if progress is not None:
+        progress(
+            100,
+            "R20.6 FINAL GROUND: "
+            f"{result.ground_count:,} measured + "
+            f"{model.synthetic_fill_point_count:,} reconstructed",
+        )
+    return replace(
+        result,
+        model=model,
+        synthetic_fill_point_count=model.synthetic_fill_point_count,
+        engine_name=ENGINE_NAME,
+    )
+
+
+def run_universal_ground_r2051(
+    cloud: CloudModel,
+    params: GroundEngineParams | None = None,
+    progress: ProgressCallback | None = None,
+) -> L3GroundLabResult:
+    """R20.5.1 comparator: measured Ground only, preserved mantle."""
+    return _run_measured(
+        cloud,
+        params,
+        progress,
+        engine_name="Universal Ground R20.5.1",
+        revision_label="R20.5.1",
     )
 
 
@@ -92,7 +190,7 @@ def run_universal_ground_r204(
     params: GroundEngineParams | None = None,
     progress: ProgressCallback | None = None,
 ) -> L3GroundLabResult:
-    """Unmodified R20.4 classification geometry for A/B field comparison."""
+    """Unmodified R20.4 classification geometry for A/B comparison."""
     return run_l3_ground_lab(
         cloud,
         params,
