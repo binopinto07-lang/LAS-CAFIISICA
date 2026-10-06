@@ -272,7 +272,7 @@
     }
     colors.needsUpdate = true;
     state.mdtColorMode = mode;
-    status("MDT R20.5 · " + mode + " · verde=medido / amarelo=interpolado na vista Observação");
+    status("MDT R20.5.1 · " + mode + " · verde=medido / amarelo=interpolado na vista Observação");
   }
 
   function showMDTPreview(data) {
@@ -283,7 +283,7 @@
     state.viewer.scene.scene.add(state.mdtMesh);
     setMDTColorMode("elevation");
     setViewMode("mdt");
-    status("MDT R20.5 calculado em memória · pré-visualização 3D · exportação pendente");
+    status("MDT R20.5.1 calculado em memória · pré-visualização 3D · exportação pendente");
   }
 
   function applyViewMode() {
