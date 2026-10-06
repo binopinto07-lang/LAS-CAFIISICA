@@ -899,7 +899,7 @@ class MainWindow(QMainWindow):
         if self._mdt_preview is None or self._mdt_worker is not None:
             return
         source = self._mdt_preview.source
-        suggested = source.with_name(source.stem + "_MDT_R20_6.tif")
+        suggested = source.with_name(source.stem + "_MDT_R20_6_2.tif")
         filename, _ = QFileDialog.getSaveFileName(
             self, "EXPORTAR MDT aprovado", str(suggested),
             "GeoTIFF (*.tif *.tiff)",
