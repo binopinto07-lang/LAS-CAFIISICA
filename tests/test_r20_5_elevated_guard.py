@@ -77,10 +77,12 @@ def test_vertical_structure_rejects_thick_irregular_p1_clutter():
     shape = (grid.ny, grid.nx)
     upper = np.asarray(grid.max_z, dtype=np.float32).reshape(shape)
     lower = np.asarray(grid.min_z, dtype=np.float32).reshape(shape)
-    # Simulate a dense vegetation/object patch with strong normal thickness.
-    upper[20:30, 20:30] = lower[20:30, 20:30] + 0.95
     # Disturb the low envelope so the patch disagrees with neighbouring planes.
     lower[23:27, 23:27] += 0.35
+    # Simulate dense vegetation/object structure with a REAL 0.95 m thickness
+    # above the disturbed low envelope. Build upper AFTER changing lower so
+    # this fixture does not accidentally shrink the intended thickness.
+    upper[20:30, 20:30] = lower[20:30, 20:30] + 0.95
     grid.min_z = lower.ravel()
     grid.max_z = upper.ravel()
 
