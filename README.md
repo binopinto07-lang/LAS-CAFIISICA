@@ -98,3 +98,14 @@ the elevated-object mask no longer mutates `mantle.veto_guard`. The MANTO is
 again built with the exact R20.4 builder and remains untouched. A separate
 R20.5.1 veto blocks elevated islands only in continuity/FINAL GROUND. MDT
 preview-before-export is retained. See `R20_5_1_LEIA_ME.md`.
+
+
+## R20.6 — Ground Complete (experimental)
+
+Branch `r20-6-ground-complete` keeps the preserved R20 mantle and separates
+measured Ground from reconstructed Ground. FINAL GROUND now combines accepted
+measured returns with synthetic class-2 points generated only for explicit
+`NO_GROUND_OBSERVATION` mantle cells. Reconstructed points are marked with
+`GroundSource=2` and R20.6 `GroundMethod=13`; they are not physical
+observations. MDT preview now distinguishes measured, reconstructed and
+raster-only interpolation states. See `R20_6_LEIA_ME.md`.
