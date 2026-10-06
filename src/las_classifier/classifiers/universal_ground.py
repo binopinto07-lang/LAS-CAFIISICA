@@ -61,10 +61,12 @@ class UniversalCompleteGroundModel:
         reconstruction: MantleGroundReconstruction,
         *,
         spacing_m: float,
+        measured_ground_points: int = 0,
     ) -> None:
         self.base_model = base_model
         self.reconstruction = reconstruction
         self.engine_name = ENGINE_NAME
+        self.measured_ground_point_count = int(measured_ground_points)
         self.params = replace(
             base_model.params,
             synthetic_spacing=float(spacing_m),
@@ -168,6 +170,7 @@ def run_universal_ground(
         result.model,
         reconstruction,
         spacing_m=reconstruction.effective_spacing,
+        measured_ground_points=result.ground_count,
     )
     if progress is not None:
         progress(
