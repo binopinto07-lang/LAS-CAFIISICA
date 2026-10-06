@@ -128,6 +128,7 @@ def build_mantle_ground_reconstruction(
     mantle,
     *,
     measured_ground_cells: np.ndarray | None = None,
+    elevated_mask: np.ndarray | None = None,
     spacing_m: float = 0.25,
     max_points: int = 12_000_000,
 ) -> MantleGroundReconstruction:
@@ -185,6 +186,11 @@ def build_mantle_ground_reconstruction(
         )
         if elevated.shape != shape:
             raise ValueError("R20.6 elevated-candidate shape mismatch")
+    if elevated_mask is not None:
+        extra = np.asarray(elevated_mask, dtype=np.bool_)
+        if extra.shape != shape:
+            raise ValueError("R20.6.2 final-veto shape mismatch")
+        elevated |= extra
 
     # If the visible surface itself was flagged as elevated and no accepted
     # measured Ground survived in that cell, treat it as HIDDEN GROUND. Never
