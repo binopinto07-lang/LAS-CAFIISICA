@@ -757,6 +757,7 @@ class MainWindow(QMainWindow):
                 f"  Reconstructed XY cells: {getattr(model, 'reconstructed_cell_count', 0):,}",
                 f"  Empty/inferred mantle cells: {getattr(model, 'reconstructed_inferred_cell_count', 0):,}",
                 f"  Ground-not-observed under returns: {getattr(model, 'reconstructed_hidden_cell_count', 0):,}",
+                f"  Reliable MANTO cells without accepted measured Ground: {getattr(model, 'reconstructed_reliable_missing_cell_count', 0):,}",
                 f"  Synthetic Ground points: {getattr(model, 'synthetic_fill_point_count', 0):,}",
                 f"  Effective synthetic spacing: {getattr(model, 'effective_fill_spacing', 0.0):.3f} m",
                 "  Reconstructed points are class 2 but GroundSource=2; they are NOT measured observations.",
