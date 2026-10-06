@@ -118,3 +118,60 @@ def test_mdt_marks_reconstructed_ground_separately(tmp_path):
     )
     assert preview.reconstructed_points == 1
     assert 2 in set(preview.state.ravel().tolist())
+
+
+def test_r20_6_2_fast_mdt_uses_solved_model_without_reclassifying_source(tmp_path):
+    source = tmp_path / "header_only.las"
+    header = laspy.LasHeader(point_format=3, version="1.2")
+    header.add_crs(CRS.from_epsg(3763))
+    cloud = laspy.LasData(header)
+    cloud.x = np.array([1000.0, 1002.0], dtype=np.float64)
+    cloud.y = np.array([2000.0, 2002.0], dtype=np.float64)
+    cloud.z = np.array([100.0, 102.0], dtype=np.float64)
+    cloud.write(source)
+
+    shape = (4, 4)
+    mantle_surface = (
+        100.0
+        + np.arange(4, dtype=np.float32)[:, None] * 0.2
+        + np.arange(4, dtype=np.float32)[None, :] * 0.1
+    )
+    measured = np.ones(shape, dtype=bool)
+    measured[1:3, 1:3] = False
+    fill = np.zeros(shape, dtype=bool)
+    fill[1:3, 1:3] = True
+    reconstruction_surface = mantle_surface.copy()
+    reconstruction_surface[1:3, 1:3] -= 0.3
+
+    model = SimpleNamespace(
+        mantle=SimpleNamespace(
+            origin=np.array([1000.0, 2000.0]),
+            cell_size=0.5,
+            nx=4,
+            ny=4,
+            surface=mantle_surface,
+        ),
+        reconstruction=SimpleNamespace(
+            fill_mask=fill,
+            surface=reconstruction_surface,
+        ),
+        measured_ground_cells=measured,
+        measured_ground_point_count=123,
+        synthetic_fill_point_count=16,
+    )
+
+    # Deliberately no classify_points/evaluate_points/classify_xyz method.
+    preview = build_ground_mdt_preview(
+        source,
+        model,
+        resolution_m=0.25,
+        max_gap_m=0.0,
+    )
+
+    assert preview.ground_points == 123
+    assert preview.reconstructed_points == 16
+    states = set(preview.state.ravel().tolist())
+    assert 1 in states
+    assert 2 in states
+    assert 3 not in states
+    assert np.isfinite(preview.elevation[preview.state > 0]).all()
