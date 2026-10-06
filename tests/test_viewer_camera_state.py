@@ -48,14 +48,20 @@ def test_r20_mantle_view_is_lazily_prepared():
     assert 'prepare_mantle(' in worker
 
 
+def _function_block(source: str, signature: str) -> str:
+    """Return one JS function without assuming the order of other functions."""
+    start = source.index(signature)
+    stop = source.find("\n  function ", start + len(signature))
+    return source[start:] if stop < 0 else source[start:stop]
+
+
 def test_r20_5_mdt_preview_preserves_camera_and_requires_no_export():
     source = _app_js()
-    start = source.index("function showMDTPreview(data)")
-    stop = source.index("function setMDTColorMode", start)
-    block = source[start:stop]
+    block = _function_block(source, "function showMDTPreview(data)")
 
     assert "fitRepeatedly();" not in block
     assert 'setViewMode("mdt")' in block
+    assert 'setMDTColorMode("elevation")' in block
     assert "showMDTPreview" in source
     assert "clearMDTPreview: removeMDT" in source
 
