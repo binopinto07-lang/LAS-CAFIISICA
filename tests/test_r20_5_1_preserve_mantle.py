@@ -64,7 +64,7 @@ def test_r2051_continuity_does_not_mutate_mantle_guard(monkeypatch):
         fake_build,
     )
 
-    result = universal_ground._r205_continuity_builder(
+    result = universal_ground._r2051_continuity_builder(
         object(), mantle, None
     )
 
