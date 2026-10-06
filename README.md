@@ -109,3 +109,16 @@ measured returns with synthetic class-2 points generated only for explicit
 `GroundSource=2` and R20.6 `GroundMethod=13`; they are not physical
 observations. MDT preview now distinguishes measured, reconstructed and
 raster-only interpolation states. See `R20_6_LEIA_ME.md`.
+
+
+## R20.6.2 — Strong veto + Fast MDT (experimental)
+
+Branch `r20-6-2-ground-complete-veto-mdt` strengthens FINAL GROUND rejection
+with slope-normal vertical-structure evidence and propagates the final
+elevated-object veto into mantle reconstruction. A rejected object can no
+longer be recreated at its visible P1 height; hidden terrain is projected from
+measured Ground support.
+
+MDT Preview now uses the already solved Ground/mantle/reconstruction model and
+does not perform a second classification pass over the full LAS/LAZ. See
+`R20_6_2_LEIA_ME.md`.
