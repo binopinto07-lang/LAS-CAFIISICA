@@ -405,10 +405,10 @@ class MainWindow(QMainWindow):
             )
             QMessageBox.warning(
                 self,
-                "Código V2 desatualizado",
+                "Código desatualizado",
                 "Esta pasta não contém todos os ficheiros exigidos pelo perfil atual.\n\n"
                 + lines
-                + "\n\nDescarregue/atualize a branch V2 antes de executar o build.",
+                + "\n\nDescarregue/atualize a branch indicada no perfil antes de executar o build.",
             )
             return False
 
@@ -428,13 +428,13 @@ class MainWindow(QMainWindow):
                 )
                 QMessageBox.warning(
                     self,
-                    "Código V2 desatualizado",
+                    "Código desatualizado",
                     "O Local Build Manager detetou que esta pasta é uma cópia antiga "
                     "da branch V2.\n\n"
                     f"Revisão exigida: {expected}\n"
                     f"Revisão encontrada: {actual or 'AUSENTE'}\n\n"
                     "Não será iniciado TEST/BUILD com código antigo. "
-                    "Descarregue novamente a branch V2 ou use um clone Git atualizado.",
+                    "Descarregue novamente a branch indicada no perfil ou use um clone Git atualizado.",
                 )
                 return False
 
