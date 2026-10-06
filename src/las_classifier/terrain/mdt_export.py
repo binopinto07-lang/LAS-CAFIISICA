@@ -9,7 +9,7 @@ from typing import Callable
 
 import laspy
 import numpy as np
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import distance_transform_edt, zoom
 
 LOGGER = logging.getLogger("las_cafiisica.terrain.mdt_export")
 ProgressCallback = Callable[[int, str], None]
@@ -102,6 +102,134 @@ class MDTPreview:
         }
 
 
+def _model_surface_mdt_preview(
+    source: Path,
+    model,
+    *,
+    resolution_m: float,
+    max_gap_m: float,
+    max_cells: int,
+) -> MDTPreview | None:
+    """Fast R20.6.2 path: build MDT from the already solved terrain model.
+
+    No second pass over the 318M-point source is required. Measured Ground uses
+    the preserved mantle surface in cells where points survived FINAL GROUND;
+    reconstructed Ground uses the separate reconstruction surface.
+    """
+    mantle = getattr(model, "mantle", None)
+    reconstruction = getattr(model, "reconstruction", None)
+    measured_cells = getattr(model, "measured_ground_cells", None)
+    if mantle is None or reconstruction is None or measured_cells is None:
+        return None
+
+    measured = np.asarray(measured_cells, dtype=np.bool_)
+    reconstructed = np.asarray(reconstruction.fill_mask, dtype=np.bool_)
+    shape = (int(mantle.ny), int(mantle.nx))
+    if measured.shape != shape or reconstructed.shape != shape:
+        raise ValueError("R20.6.2 model-surface MDT shape mismatch")
+
+    support = measured | reconstructed
+    if not np.any(support):
+        raise ValueError("R20.6.2 model contains no Ground support cells")
+
+    source_surface = np.full(shape, np.nan, dtype=np.float32)
+    mantle_surface = np.asarray(mantle.surface, dtype=np.float32).reshape(shape)
+    reconstruction_surface = np.asarray(
+        reconstruction.surface, dtype=np.float32
+    ).reshape(shape)
+    source_surface[measured] = mantle_surface[measured]
+    source_surface[reconstructed & ~measured] = (
+        reconstruction_surface[reconstructed & ~measured]
+    )
+
+    state_src = np.full(shape, NO_GROUND_OBSERVATION, dtype=np.uint8)
+    state_src[measured] = OBSERVED_GROUND
+    state_src[reconstructed & ~measured] = RECONSTRUCTED_GROUND
+
+    cell = float(mantle.cell_size)
+    xmin = float(mantle.origin[0])
+    ymin = float(mantle.origin[1])
+    xmax = xmin + int(mantle.nx) * cell
+    ymax = ymin + int(mantle.ny) * cell
+
+    width = max(1, int(np.floor((xmax - xmin) / resolution_m)) + 1)
+    height = max(1, int(np.floor((ymax - ymin) / resolution_m)) + 1)
+    cells = int(width) * int(height)
+    if cells > int(max_cells):
+        raise MemoryError(
+            f"MDT grid has {cells:,} cells; increase resolution_m "
+            f"or tile the raster (limit {max_cells:,})."
+        )
+
+    # Fill numeric support only for interpolation, then reapply the categorical
+    # support mask. This never turns an unsupported cell into Ground.
+    nearest = distance_transform_edt(
+        ~support,
+        return_distances=False,
+        return_indices=True,
+    )
+    numeric = source_surface[tuple(nearest)].astype(np.float32, copy=False)
+
+    scale_y = height / shape[0]
+    scale_x = width / shape[1]
+    elevation = zoom(
+        numeric,
+        (scale_y, scale_x),
+        order=1,
+        mode="nearest",
+        prefilter=False,
+    ).astype(np.float32, copy=False)
+    state = zoom(
+        state_src,
+        (scale_y, scale_x),
+        order=0,
+        mode="nearest",
+        prefilter=False,
+    ).astype(np.uint8, copy=False)
+
+    # scipy may round shape by one cell depending on scale.
+    elevation = elevation[:height, :width]
+    state = state[:height, :width]
+    if elevation.shape != (height, width) or state.shape != (height, width):
+        padded_elevation = np.full((height, width), np.nan, dtype=np.float32)
+        padded_state = np.zeros((height, width), dtype=np.uint8)
+        hh = min(height, elevation.shape[0])
+        ww = min(width, elevation.shape[1])
+        padded_elevation[:hh, :ww] = elevation[:hh, :ww]
+        padded_state[:hh, :ww] = state[:hh, :ww]
+        elevation, state = padded_elevation, padded_state
+
+    elevation[state == NO_GROUND_OBSERVATION] = np.nan
+
+    # Mantle rows start at ymin; GeoTIFF rows start at ymax.
+    elevation = np.flipud(elevation)
+    state = np.flipud(state)
+
+    elevation, state = fill_small_mdt_gaps(
+        elevation,
+        state > NO_GROUND_OBSERVATION,
+        resolution_m=resolution_m,
+        max_gap_m=max_gap_m,
+        base_state=state,
+    )
+
+    return MDTPreview(
+        source=source,
+        elevation=elevation,
+        state=state,
+        xmin=xmin,
+        ymax=ymax,
+        resolution_m=resolution_m,
+        max_gap_m=max_gap_m,
+        ground_points=int(
+            getattr(model, "measured_ground_point_count", 0)
+        ),
+        reconstructed_points=int(
+            getattr(model, "synthetic_fill_point_count", 0)
+        ),
+    )
+
+
 def build_ground_mdt_preview(
     source_path: str | Path,
     model,
@@ -121,7 +249,21 @@ def build_ground_mdt_preview(
     with laspy.open(source) as reader:
         crs = reader.header.parse_crs()
         if crs is None or crs.to_epsg() != 3763:
-            raise ValueError("R20.6 MDT requires declared EPSG:3763")
+            raise ValueError("R20.6.2 MDT requires declared EPSG:3763")
+
+    fast_preview = _model_surface_mdt_preview(
+        source,
+        model,
+        resolution_m=resolution_m,
+        max_gap_m=max_gap_m,
+        max_cells=max_cells,
+    )
+    if fast_preview is not None:
+        if progress is not None:
+            progress(100, "R20.6.2 MDT: preview criado do modelo Ground")
+        return fast_preview
+
+    with laspy.open(source) as reader:
         xmin, ymin, _ = map(float, reader.header.mins)
         xmax, ymax, _ = map(float, reader.header.maxs)
         width = max(1, int(np.floor((xmax - xmin) / resolution_m)) + 1)
@@ -161,7 +303,7 @@ def build_ground_mdt_preview(
             if progress is not None and total:
                 progress(
                     int(75 * processed / total),
-                    f"R20.6 MDT: Ground {processed:,}/{total:,}",
+                    f"R20.6.2 MDT: Ground {processed:,}/{total:,}",
                 )
 
     measured_count = count.reshape(height, width)
@@ -245,7 +387,7 @@ def write_ground_mdt(
         import rasterio
         from rasterio.transform import from_origin
     except ImportError as exc:
-        raise RuntimeError("R20.6 MDT export requires rasterio") from exc
+        raise RuntimeError("R20.6.2 MDT export requires rasterio") from exc
 
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() not in {".tif", ".tiff"}:
@@ -268,7 +410,7 @@ def write_ground_mdt(
         "compress": "deflate", "tiled": True,
     }
     if progress is not None:
-        progress(50, "R20.6 MDT: escrever GeoTIFF")
+        progress(50, "R20.6.2 MDT: escrever GeoTIFF")
     with rasterio.open(output, "w", **profile) as dst:
         dst.write(
             np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32),
@@ -277,7 +419,7 @@ def write_ground_mdt(
         dst.set_band_description(1, "MDT elevation metres")
 
     if progress is not None:
-        progress(75, "R20.6 MDT: escrever mapa Observado/Interpolado")
+        progress(75, "R20.6.2 MDT: escrever mapa Observado/Interpolado")
     state_profile = dict(profile, dtype="uint8", nodata=255)
     with rasterio.open(state_path, "w", **state_profile) as dst:
         dst.write(state.astype(np.uint8), 1)
@@ -288,7 +430,7 @@ def write_ground_mdt(
         )
 
     result = {
-        "algorithm": "LAS_CAFIISICA_MDT_R20_6",
+        "algorithm": "LAS_CAFIISICA_MDT_R20_6_2",
         "source": str(preview.source),
         "mdt": str(output),
         "observation_state": str(state_path),
@@ -307,9 +449,9 @@ def write_ground_mdt(
     report_path.write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    LOGGER.info("R20_6_MDT=%s", output)
+    LOGGER.info("R20_6_2_MDT=%s", output)
     if progress is not None:
-        progress(100, "R20.6 MDT exportado")
+        progress(100, "R20.6.2 MDT exportado")
     return result
 
 
