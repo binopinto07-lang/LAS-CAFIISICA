@@ -165,3 +165,43 @@ def test_r20_6_uses_only_accepted_measured_ground_as_projection_anchor():
         spacing_m=0.25,
     )
     assert reconstruction.fill_mask[2, 2]
+
+
+def test_elevated_reliable_cell_is_projected_as_hidden_not_copied():
+    mantle = _mantle()
+    measured = np.ones((5, 5), dtype=bool)
+    measured[2, 3] = False
+    mantle.reliable[2, 3] = True
+    mantle.observed[2, 3] = True
+    mantle.veto_guard.roof_candidate[2, 3] = True
+    mantle.surface[2, 3] = 108.0  # visible elevated object
+    # Adjacent measured terrain is around 100.x and slopes gently in X.
+    before = float(mantle.surface[2, 3])
+
+    reconstruction = build_mantle_ground_reconstruction(
+        mantle,
+        measured_ground_cells=measured,
+        spacing_m=0.25,
+        max_points=1000,
+    )
+
+    assert reconstruction.fill_mask[2, 3]
+    assert reconstruction.source_state[2, 3] == 2
+    assert reconstruction.source_state[2, 3] != 3
+    assert float(reconstruction.surface[2, 3]) < before - 1.0
+
+
+def test_elevated_cell_never_becomes_reconstruction_anchor():
+    mantle = _mantle()
+    measured = np.zeros((5, 5), dtype=bool)
+    measured[2, 2] = True
+    mantle.reliable[:] = False
+    mantle.reliable[2, 2] = True
+    mantle.veto_guard.canopy_candidate[2, 2] = True
+
+    reconstruction = build_mantle_ground_reconstruction(
+        mantle,
+        measured_ground_cells=measured,
+        spacing_m=0.25,
+    )
+    assert reconstruction.point_count == 0
