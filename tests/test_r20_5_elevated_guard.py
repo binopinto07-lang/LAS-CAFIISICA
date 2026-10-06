@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from las_classifier.terrain.elevated_surface_guard import elevated_island_mask
+from las_classifier.terrain.elevated_surface_guard import elevated_island_mask, vertical_structure_mask
 
 
 def make_evidence(
@@ -70,3 +70,26 @@ def test_invalid_evidence_shape_is_rejected():
     import pytest
     with pytest.raises(ValueError, match="shape"):
         elevated_island_mask(grid, mantle)
+
+
+def test_vertical_structure_rejects_thick_irregular_p1_clutter():
+    grid, mantle = make_evidence(slope_x=0.4, slope_y=0.1)
+    shape = (grid.ny, grid.nx)
+    upper = np.asarray(grid.max_z, dtype=np.float32).reshape(shape)
+    lower = np.asarray(grid.min_z, dtype=np.float32).reshape(shape)
+    # Simulate a dense vegetation/object patch with strong normal thickness.
+    upper[20:30, 20:30] = lower[20:30, 20:30] + 0.95
+    # Disturb the low envelope so the patch disagrees with neighbouring planes.
+    lower[23:27, 23:27] += 0.35
+    grid.min_z = lower.ravel()
+    grid.max_z = upper.ravel()
+
+    mask = vertical_structure_mask(grid, mantle)
+    assert mask[24, 24]
+    assert not mask[2, 2]
+
+
+def test_vertical_structure_does_not_reject_clean_steep_plane():
+    grid, mantle = make_evidence(slope_x=2.0, slope_y=0.7)
+    mask = vertical_structure_mask(grid, mantle)
+    assert not np.any(mask)
