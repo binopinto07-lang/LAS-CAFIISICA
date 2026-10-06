@@ -36,6 +36,8 @@ def _classify_points(model, points, x, y, z) -> np.ndarray:
 
 def _method_code(model) -> int:
     name = str(getattr(model, "engine_name", "")).lower()
+    if "universal ground r20.5" in name:
+        return 11
     if "universal ground r20.4" in name:
         return 10
     if "ground continuity r20.3" in name:
