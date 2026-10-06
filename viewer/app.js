@@ -166,8 +166,12 @@
     }
     const valid = data.z.filter((v) => v !== null && Number.isFinite(v));
     if (!valid.length) throw new Error("MDT sem células válidas");
-    const minZ = Math.min(...valid);
-    const maxZ = Math.max(...valid);
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const value of valid) {
+      if (value < minZ) minZ = value;
+      if (value > maxZ) maxZ = value;
+    }
     const positions = new Float32Array(nx * ny * 3);
     const colors = new Float32Array(nx * ny * 3);
     const cell = data.resolution_m;
@@ -202,8 +206,15 @@
       }
     }
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const positionAttribute = new THREE.BufferAttribute(positions, 3);
+    const colorAttribute = new THREE.BufferAttribute(colors, 3);
+    if (typeof geometry.setAttribute === "function") {
+      geometry.setAttribute("position", positionAttribute);
+      geometry.setAttribute("color", colorAttribute);
+    } else {
+      geometry.addAttribute("position", positionAttribute);
+      geometry.addAttribute("color", colorAttribute);
+    }
     geometry.setIndex(triangles);
     geometry.computeVertexNormals();
     const mesh = new THREE.Mesh(
