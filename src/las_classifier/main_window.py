@@ -676,6 +676,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
+            "Universal Ground R20.5",
         }:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
@@ -891,7 +892,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"MDT concluído: {info['mdt']}")
         QMessageBox.information(
             self,
-            "LAS-CAFIISICA — MDT R20.4",
+            "LAS-CAFIISICA — MDT R20.5",
             "MDT criado:\n"
             + info["mdt"]
             + "\n\nEstado de observação:\n"
@@ -901,7 +902,7 @@ class MainWindow(QMainWindow):
 
     def _mdt_failed(self, message: str) -> None:
         self.statusBar().showMessage("MDT falhou")
-        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.4", message)
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.5", message)
 
     def _mdt_finished(self) -> None:
         worker = self._mdt_worker
