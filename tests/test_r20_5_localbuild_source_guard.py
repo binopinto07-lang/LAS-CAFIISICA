@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 
-EXPECTED = "LAS_CAFIISICA_GROUND_V2_2026_10_R20_6"
+EXPECTED = "LAS_CAFIISICA_GROUND_V2_2026_10_R20_6_1"
 
 
 def _load(path: str) -> dict:
@@ -21,7 +21,7 @@ def test_localbuild_source_guard_matches_source_revision():
 
     for cfg in (root, bundled):
         assert cfg["branch"] == "r20-6-ground-complete"
-        assert int(cfg["config_revision"]) >= 50
+        assert int(cfg["config_revision"]) >= 52
         guard = cfg["required_source_revision"]
         assert guard["path"] == "localbuild/SOURCE_REVISION.txt"
         assert guard["value"] == EXPECTED
