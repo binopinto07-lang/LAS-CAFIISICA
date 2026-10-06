@@ -1,8 +1,8 @@
 {
   "id": "las_cafiisica_ground_v2",
-  "name": "LAS-CAFIISICA — R20.4 UNIVERSAL GROUND + MDT",
+  "name": "LAS-CAFIISICA — R20.5 OBJECT VETO + MDT PREVIEW",
   "repo_url": "https://github.com/binopinto07-lang/LAS-CAFIISICA.git",
-  "branch": "r20-4-universal-mdt",
+  "branch": "r20-5-ground-veto-mdt-preview",
   "python_version": "3.12",
   "dist_dir_name": "LAS_CAFIISICA",
   "checks": [
@@ -33,7 +33,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_4'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_5'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -133,7 +133,7 @@
       {
         "id": "verify-ground-v2-source",
         "name": "Verificar fonte Ground Engine V2",
-        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_4'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_5'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
         "timeout_minutes": 2,
         "category": "test",
         "venv": "test"
@@ -229,7 +229,7 @@
     ]
   },
   "release": {},
-  "config_revision": 41,
+  "config_revision": 42,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
@@ -332,7 +332,10 @@
     "tests/test_r20_4_universal_ground.py",
     "tests/test_r20_4_mdt.py",
     "R20_4_LEIA_ME.md",
-    "tests/test_r20_4_spatial_sample.py"
+    "tests/test_r20_4_spatial_sample.py",
+    "src/las_classifier/terrain/elevated_surface_guard.py",
+    "tests/test_r20_5_elevated_guard.py",
+    "tests/test_r20_5_mdt_preview.py"
   ],
   "required_source_revision": {
     "path": "localbuild/SOURCE_REVISION.txt",
