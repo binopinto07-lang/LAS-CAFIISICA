@@ -72,6 +72,10 @@ class MantleGroundReconstruction:
     def hidden_ground_cell_count(self) -> int:
         return int(np.count_nonzero(self.source_state == 2))
 
+    @property
+    def reliable_missing_cell_count(self) -> int:
+        return int(np.count_nonzero(self.source_state == 3))
+
     def iter_xyz(
         self,
         chunk_points: int = 500_000,
@@ -123,6 +127,7 @@ class MantleGroundReconstruction:
 def build_mantle_ground_reconstruction(
     mantle,
     *,
+    measured_ground_cells: np.ndarray | None = None,
     spacing_m: float = 0.25,
     max_points: int = 12_000_000,
 ) -> MantleGroundReconstruction:
@@ -130,6 +135,7 @@ def build_mantle_ground_reconstruction(
 
     State 1: empty/unobserved cell inferred by the R20 mantle.
     State 2: measured upper returns exist, but Ground itself is not observed.
+    State 3: mantle is reliable, but no measured point survived FINAL GROUND.
 
     For state 2, the raw mantle can ride the visible canopy/object. Therefore
     the reconstruction centre is projected from the nearest reliable measured
@@ -145,8 +151,24 @@ def build_mantle_ground_reconstruction(
         mantle.possible_no_ground_observation, dtype=np.bool_
     )
     reliable = np.asarray(mantle.reliable, dtype=np.bool_)
-    if inferred.shape != shape or hidden.shape != shape or reliable.shape != shape:
+    observed = np.asarray(mantle.observed, dtype=np.bool_)
+    if (
+        inferred.shape != shape
+        or hidden.shape != shape
+        or reliable.shape != shape
+        or observed.shape != shape
+    ):
         raise ValueError("R20.6 mantle state shape mismatch")
+
+    if measured_ground_cells is None:
+        measured_ground = reliable.copy()
+    else:
+        measured_ground = np.asarray(
+            measured_ground_cells, dtype=np.bool_
+        )
+        if measured_ground.shape != shape:
+            raise ValueError("R20.6 measured-Ground cell shape mismatch")
+    reliable_missing = reliable & ~measured_ground
 
     breakline = getattr(mantle, "breakline", None)
     if breakline is None:
@@ -155,7 +177,7 @@ def build_mantle_ground_reconstruction(
         breakline = np.asarray(breakline, dtype=np.bool_).reshape(shape)
 
     guard = getattr(mantle, "veto_guard", None)
-    anchor = reliable & np.isfinite(surface) & ~breakline
+    anchor = reliable & measured_ground & np.isfinite(surface) & ~breakline
     if guard is not None:
         # Elevated candidate cells may need reconstruction, but must never act
         # as measured anchors for that reconstruction.
@@ -167,7 +189,7 @@ def build_mantle_ground_reconstruction(
         max_points=max(1, int(max_points)),
     )
 
-    fill = (inferred | hidden) & np.isfinite(surface) & ~breakline
+    fill = (inferred | hidden | reliable_missing) & np.isfinite(surface) & ~breakline
     out_surface = surface.copy()
     out_sx = np.asarray(mantle.slope_x, dtype=np.float32).copy()
     out_sy = np.asarray(mantle.slope_y, dtype=np.float32).copy()
@@ -211,6 +233,7 @@ def build_mantle_ground_reconstruction(
     state = np.zeros(shape, dtype=np.uint8)
     state[inferred & fill] = 1
     state[hidden & fill] = 2
+    state[reliable_missing & fill] = 3
 
     return MantleGroundReconstruction(
         origin=np.asarray(mantle.origin, dtype=np.float64).copy(),
