@@ -46,3 +46,21 @@ def test_r20_mantle_view_is_lazily_prepared():
     assert 'self._loaded["mantle"]' in widget
     assert 'self.mantle_requested.emit()' in widget
     assert 'prepare_mantle(' in worker
+
+
+def test_r20_5_mdt_preview_preserves_camera_and_requires_no_export():
+    source = _app_js()
+    start = source.index("function showMDTPreview(data)")
+    stop = source.index("function setMDTColorMode", start)
+    block = source[start:stop]
+
+    assert "fitRepeatedly();" not in block
+    assert 'setViewMode("mdt")' in block
+    assert "showMDTPreview" in source
+    assert "clearMDTPreview: removeMDT" in source
+
+
+def test_r20_5_mdt_view_has_three_display_modes():
+    source = _app_js()
+    assert '"elevation", "hillshade", "observation"' in source
+    assert "INTERPOLATED" not in source or "observation" in source
