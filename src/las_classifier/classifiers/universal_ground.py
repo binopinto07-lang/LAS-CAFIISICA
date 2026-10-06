@@ -62,3 +62,24 @@ def run_universal_ground(
         collect_gate_diagnostics=True,
         require_lidar=False,
     )
+
+
+def run_universal_ground_r204(
+    cloud: CloudModel,
+    params: GroundEngineParams | None = None,
+    progress: ProgressCallback | None = None,
+) -> L3GroundLabResult:
+    """Unmodified R20.4 classification geometry for A/B field comparison."""
+    return run_l3_ground_lab(
+        cloud,
+        params,
+        progress,
+        source_override=None,
+        context_builder=_dense_context,
+        mantle_builder=_mantle_with_guard,
+        continuity_builder=_continuity_builder,
+        engine_name="Universal Ground R20.4",
+        revision_label="R20.4",
+        collect_gate_diagnostics=True,
+        require_lidar=False,
+    )
