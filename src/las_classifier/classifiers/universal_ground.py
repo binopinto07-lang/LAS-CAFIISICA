@@ -1,4 +1,4 @@
-"""R20.4 universal Ground engine.
+"""R20.5 universal Ground engine.
 
 P1 photogrammetry, L3/LiDAR and UNKNOWN LAS/LAZ sources execute the same
 R20.3 geometry pipeline: PTD -> dense evidence -> inverted mantle -> object
@@ -17,11 +17,25 @@ from .l3_ground_lab import L3GroundLabResult, run_l3_ground_lab
 from .l3_inverted_ground import _dense_context
 from .l3_mantle_veto import _mantle_with_guard
 from .l3_ground_continuity import _continuity_builder
+from ..terrain.elevated_surface_guard import elevated_island_mask
 
 ProgressCallback = Callable[[int, str], None]
 
-ENGINE_NAME = "Universal Ground R20.4"
-REVISION = "R20.4"
+ENGINE_NAME = "Universal Ground R20.5"
+REVISION = "R20.5"
+
+
+def _r205_mantle_with_guard(context, progress):
+    """Preserve R20 mantle; extend its *existing* veto before continuity.
+
+    Candidate objects cannot bootstrap continuity, even when an erroneous PTD
+    triangle follows the object's top. The same veto applies to all sensors.
+    """
+    mantle = _mantle_with_guard(context, progress)
+    mask = elevated_island_mask(context, mantle)
+    mantle.veto_guard.roof_candidate |= mask
+    return mantle
+
 
 
 def run_universal_ground(
@@ -32,7 +46,7 @@ def run_universal_ground(
     """Run one geometry-first procedure for every supported point-cloud source.
 
     P1 is deliberately NOT redirected to a simpler engine.  When no physical
-    Ground point exists below vegetation, R20.4 may support an MDT gap later,
+    Ground point exists below vegetation, R20.5 may support an MDT gap later,
     but this classifier never fabricates that point as measured Ground.
     """
     return run_l3_ground_lab(
@@ -41,7 +55,7 @@ def run_universal_ground(
         progress,
         source_override=None,
         context_builder=_dense_context,
-        mantle_builder=_mantle_with_guard,
+        mantle_builder=_r205_mantle_with_guard,
         continuity_builder=_continuity_builder,
         engine_name=ENGINE_NAME,
         revision_label=REVISION,
