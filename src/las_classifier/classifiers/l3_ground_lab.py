@@ -27,6 +27,7 @@ from ..terrain.mantle_veto import (
     apply_mantle_veto,
 )
 from ..terrain.ground_continuity import apply_continuity_recovery
+from ..terrain.elevated_surface_guard import apply_elevated_surface_veto
 from ..terrain.l3_context import (
     CoarseDetrendModel,
     L3SpatialContext,
@@ -394,6 +395,11 @@ class L3GroundLabModel:
                     apply_continuity_recovery(
                         evidence, self.continuity, guard, x, y, z, invalid
                     )
+                    final_veto = getattr(self.continuity, "final_veto", None)
+                    if final_veto is not None:
+                        apply_elevated_surface_veto(
+                            evidence, final_veto, x, y, z, invalid
+                        )
         return evidence
 
     def rejection_reason_points(
