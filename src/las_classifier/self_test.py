@@ -17,6 +17,7 @@ from .cloud.loader import (
     load_cloud,
 )
 from .cloud.statistics import calculate_statistics
+from .terrain.mdt_export import build_ground_mdt_preview, write_ground_mdt
 from .viewer.paths import (
     converter_executable,
     potree_root,
@@ -52,6 +53,7 @@ def run_self_test(
         import scipy
         import laspy
         import pyproj
+        import rasterio
         import PySide6
         from PySide6 import (
             QtWebEngineCore,
@@ -63,6 +65,7 @@ def run_self_test(
         _ok(lines, "SCIPY")
         _ok(lines, "LASPY")
         _ok(lines, "PYPROJ")
+        _ok(lines, "RASTERIO")
         importlib.import_module("lazrs")
         _ok(lines, "LAZ")
         _ok(lines, "PYSIDE6")
@@ -115,6 +118,7 @@ def run_self_test(
                 point_format=3,
                 version="1.2",
             )
+            header.add_crs(pyproj.CRS.from_epsg(3763))
             las = laspy.LasData(header)
             las.x = np.array(
                 [0.0, 1.0, 2.0, 3.0]
@@ -214,6 +218,30 @@ def run_self_test(
                     "Classified export CRS self-test failed"
                 )
             _ok(lines, "CLASSIFIED_EXPORT")
+
+            preview = build_ground_mdt_preview(
+                las_path,
+                smrf.model,
+                resolution_m=1.0,
+                max_gap_m=0.0,
+                max_cells=100,
+            )
+            if preview.ground_points <= 0:
+                raise RuntimeError("MDT preview self-test produced no Ground")
+            if any(temp.glob("*_MDT*.tif")):
+                raise RuntimeError("MDT preview wrote a file before explicit export")
+            _ok(lines, "MDT_PREVIEW_IN_MEMORY")
+
+            mdt_path = temp / "self_test_MDT.tif"
+            mdt_info = write_ground_mdt(preview, mdt_path)
+            if (
+                not mdt_path.is_file()
+                or not Path(mdt_info["observation_state"]).is_file()
+                or mdt_info["crs"] != "EPSG:3763"
+            ):
+                raise RuntimeError("MDT GeoTIFF export self-test failed")
+            _ok(lines, "MDT_GEOTIFF")
+            _ok(lines, "MDT_OBSERVATION_STATE")
 
         lines.extend(
             ["", "RESULT=PASS"]
