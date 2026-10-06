@@ -19,7 +19,7 @@ class MantleReconstructionConfig:
     spacing_m: float = 0.25
     max_points: int = 12_000_000
     max_anchor_distance_m: float = 3.0
-    max_hidden_projection_delta_m: float = 3.0
+    max_hidden_projection_above_visible_m: float = 0.50
 
 
 @dataclass(slots=True)
@@ -236,10 +236,13 @@ def build_mantle_ground_reconstruction(
             dy = (rr - ar).astype(np.float64) * float(mantle.cell_size)
             projected = anchor_z + anchor_sx * dx + anchor_sy * dy
             raw = surface[rr, cc].astype(np.float64)
-            projected = np.clip(
+            # The visible upper return is NOT a lower bound for hidden
+            # terrain. A roof/tree can sit many metres above real Ground.
+            # Only prevent an extrapolated terrain plane from rising
+            # implausibly above the visible surface.
+            projected = np.minimum(
                 projected,
-                raw - config.max_hidden_projection_delta_m,
-                raw + 0.50,
+                raw + config.max_hidden_projection_above_visible_m,
             )
             out_surface[rr, cc] = projected.astype(np.float32)
             out_sx[rr, cc] = anchor_sx.astype(np.float32)
