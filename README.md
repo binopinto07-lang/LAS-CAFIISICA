@@ -89,3 +89,12 @@ The MDT workflow is now review-first: **CRIAR MDT (PREVIEW)** computes the
 terrain in memory and shows a 3D mesh with Elevation, Hillshade and Observation
 modes. **EXPORTAR MDT VALIDADO** is enabled only after a preview exists and
 writes the exact reviewed MDT. See `R20_5_LEIA_ME.md`.
+
+
+## R20.5.1 — Preserve Mantle hotfix (experimental)
+
+Branch `r20-5-1-preserve-mantle` fixes a design error in the first R20.5:
+the elevated-object mask no longer mutates `mantle.veto_guard`. The MANTO is
+again built with the exact R20.4 builder and remains untouched. A separate
+R20.5.1 veto blocks elevated islands only in continuity/FINAL GROUND. MDT
+preview-before-export is retained. See `R20_5_1_LEIA_ME.md`.
