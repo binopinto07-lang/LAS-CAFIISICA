@@ -126,3 +126,91 @@ def elevated_island_mask(grid, mantle, config: ElevatedGuardConfig | None = None
         int(blocked.sum()),
     )
     return blocked
+
+
+
+@dataclass(frozen=True, slots=True)
+class ElevatedSurfaceGuard:
+    """Independent FINAL-GROUND veto. It never mutates the R20 mantle."""
+
+    origin: np.ndarray
+    cell_size: float
+    nx: int
+    ny: int
+    blocked: np.ndarray
+
+    @property
+    def blocked_cell_count(self) -> int:
+        return int(np.count_nonzero(self.blocked))
+
+    def point_mask(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+    ) -> np.ndarray:
+        x = np.asarray(x, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
+        z = np.asarray(z, dtype=np.float64)
+        if x.shape != y.shape or x.shape != z.shape:
+            raise ValueError("R20.5 elevated-veto query dimension mismatch")
+        result = np.zeros(x.shape, dtype=np.bool_)
+        finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+        index = np.flatnonzero(finite)
+        if not index.size:
+            return result
+        ix = np.floor((x[index] - self.origin[0]) / self.cell_size).astype(np.int64)
+        iy = np.floor((y[index] - self.origin[1]) / self.cell_size).astype(np.int64)
+        inside = (ix >= 0) & (ix < self.nx) & (iy >= 0) & (iy < self.ny)
+        if not np.any(inside):
+            return result
+        index = index[inside]
+        ix = ix[inside]
+        iy = iy[inside]
+        result[index] = self.blocked[iy, ix]
+        return result
+
+
+def build_elevated_surface_guard(
+    grid,
+    mantle,
+    config: ElevatedGuardConfig | None = None,
+) -> ElevatedSurfaceGuard:
+    blocked = elevated_island_mask(grid, mantle, config)
+    return ElevatedSurfaceGuard(
+        origin=np.asarray(mantle.origin, dtype=np.float64).copy(),
+        cell_size=float(grid.cell_size),
+        nx=int(grid.nx),
+        ny=int(grid.ny),
+        blocked=np.asarray(blocked, dtype=np.bool_).copy(),
+    )
+
+
+def apply_elevated_surface_veto(
+    evidence,
+    guard: ElevatedSurfaceGuard,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    invalid: np.ndarray,
+) -> np.ndarray:
+    """Reject only FINAL-GROUND points in blocked measured cells.
+
+    The R20 mantle and its diagnostic states remain unchanged. This function is
+    intentionally last in the decision chain so continuity cannot reaccept an
+    elevated object afterwards.
+    """
+    from .ground_evidence import GroundDecision, PROV_ELEVATED_SURFACE_VETO
+
+    invalid = np.asarray(invalid, dtype=np.bool_)
+    proposed = guard.point_mask(x, y, z)
+    if invalid.shape != proposed.shape:
+        raise ValueError("R20.5 elevated-veto invalid-mask mismatch")
+    accepted = evidence.classifications() == 2
+    applied = proposed & accepted & ~invalid
+    evidence.decision[applied] = int(GroundDecision.NON_GROUND_OBJECT)
+    evidence.provenance[applied] |= PROV_ELEVATED_SURFACE_VETO
+    evidence.score[applied] = np.minimum(
+        evidence.score[applied], np.float32(0.15)
+    )
+    return applied
