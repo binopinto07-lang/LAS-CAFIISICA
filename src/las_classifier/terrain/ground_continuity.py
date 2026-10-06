@@ -77,6 +77,7 @@ class GroundContinuity:
     breakline: np.ndarray
     expansion_steps: int
     config: ContinuityConfig
+    final_veto: object | None = None
 
     @property
     def connected_cell_count(self) -> int:
