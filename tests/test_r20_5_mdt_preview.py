@@ -42,7 +42,7 @@ def test_preview_is_in_memory_and_user_export_is_separate(tmp_path):
     payload = preview.browser_payload(max_side=256)
     assert payload["width"] >= 2
     assert len(payload["z"]) == payload["width"] * payload["height"]
-    assert set(payload["state"]) <= {0, 1, 2}
+    assert set(payload["state"]) <= {0, 1, 2, 3}
 
     path = tmp_path / "ground_mdt.tif"
     result = export_ground_mdt(
@@ -55,7 +55,7 @@ def test_preview_is_in_memory_and_user_export_is_separate(tmp_path):
     assert (tmp_path / "ground_mdt_OBSERVATION_STATE.tif").exists()
     assert (tmp_path / "ground_mdt.json").exists()
     assert result["ground_points"] == 5
-    assert result["interpolated_is_measured_ground"] is False
+    assert result["reconstructed_is_measured_ground"] is False\n    assert result["interpolated_is_measured_ground"] is False
 
 
 def test_mdt_raster_does_not_turn_unknown_terrain_into_measured_ground():
@@ -67,7 +67,7 @@ def test_mdt_raster_does_not_turn_unknown_terrain_into_measured_ground():
         surface, observed, resolution_m=0.25, max_gap_m=0.50,
     )
     assert state[3, 3] == 1
-    assert state[3, 4] == 2
+    assert state[3, 4] == 3
     assert state[0, 0] == 0
     assert np.isnan(filled[0, 0])
 
