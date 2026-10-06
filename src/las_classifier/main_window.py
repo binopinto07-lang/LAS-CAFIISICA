@@ -32,6 +32,7 @@ from .cloud.classification_worker import (
     GroundExportWorker,
     MantleExportWorker,
     MDTExportWorker,
+    MDTPreviewWorker,
 )
 from .cloud.worker import CloudLoadWorker
 from .ground.types import GroundEngineParams
@@ -56,6 +57,8 @@ class MainWindow(QMainWindow):
         self._export_worker: GroundExportWorker | None = None
         self._mantle_worker: MantleExportWorker | None = None
         self._mdt_worker: MDTExportWorker | None = None
+        self._mdt_preview_worker: MDTPreviewWorker | None = None
+        self._mdt_preview = None
         self._viewer_worker: ViewerPrepareWorker | None = None
         self._pending_filename: str | None = None
         self._viewer_loaded: set[str] = set()
@@ -77,6 +80,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "Universal Ground R20.5",
                 "Universal Ground R20.4",
                 "L3 Ground Continuity R20.3",
                 "L3 Inverted Ground R20.1",
@@ -89,7 +93,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Universal Ground R20.4")
+        self.engine_combo.setCurrentText("Universal Ground R20.5")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -180,18 +184,25 @@ class MainWindow(QMainWindow):
         self.mantle_export_button.setEnabled(False)
         self.mantle_export_button.clicked.connect(self.export_inverted_mantle)
 
-        self.mdt_button = QPushButton("CRIAR MDT DO GROUND")
+        self.mdt_button = QPushButton("CRIAR MDT (PREVIEW)")
         self.mdt_button.setToolTip(
-            "Cria MDT EPSG:3763 e mapa Observado/Interpolado a partir do Ground atual."
+            "Calcula o MDT em memória e mostra-o em 3D; não exporta ficheiros."
         )
         self.mdt_button.setEnabled(False)
-        self.mdt_button.clicked.connect(self.export_ground_mdt)
+        self.mdt_button.clicked.connect(self.create_mdt_preview)
+        self.export_mdt_button = QPushButton("EXPORTAR MDT VALIDADO")
+        self.export_mdt_button.setToolTip(
+            "Guarda GeoTIFF e mapa Observado/Interpolado depois da pré-visualização."
+        )
+        self.export_mdt_button.setEnabled(False)
+        self.export_mdt_button.clicked.connect(self.export_ground_mdt)
 
         buttons.addWidget(self.ground_button)
         buttons.addWidget(self.export_button)
         form.addRow(buttons)
         form.addRow(self.mantle_export_button)
         form.addRow(self.mdt_button)
+        form.addRow(self.export_mdt_button)
         engine_box.setLayout(form)
 
         self.statistics_view = QPlainTextEdit()
@@ -259,6 +270,9 @@ class MainWindow(QMainWindow):
         self.mdt_button.setEnabled(
             not active and self._ground_result is not None
         )
+        self.export_mdt_button.setEnabled(
+            not active and self._mdt_preview is not None
+        )
         if active:
             self.statusBar().showMessage(message)
 
@@ -280,6 +294,7 @@ class MainWindow(QMainWindow):
                 self._export_worker,
                 self._mantle_worker,
                 self._mdt_worker,
+                self._mdt_preview_worker,
                 self._viewer_worker,
             )
         ):
@@ -296,6 +311,7 @@ class MainWindow(QMainWindow):
 
         self._cloud = None
         self._ground_result = None
+        self._mdt_preview = None
         self._viewer_loaded.clear()
         self.viewer.clear()
         gc.collect()
@@ -478,6 +494,7 @@ class MainWindow(QMainWindow):
         engine: str,
     ) -> None:
         measured_l3 = engine in {
+            "Universal Ground R20.5",
             "Universal Ground R20.4",
             "L3 Ground Continuity R20.3",
             "L3 Inverted Ground R20.1",
@@ -494,7 +511,7 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setEnabled(
             not measured_l3
         )
-        universal = engine == "Universal Ground R20.4"
+        universal = engine in {"Universal Ground R20.5", "Universal Ground R20.4"}
         if universal:
             self.source_combo.setCurrentText("Auto detect")
         self.source_combo.setEnabled(not universal)
@@ -526,6 +543,9 @@ class MainWindow(QMainWindow):
             return
 
         self._ground_result = None
+        self._mdt_preview = None
+        self.export_mdt_button.setEnabled(False)
+        self.viewer.clear_mdt_preview()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         engine = self.engine_combo.currentText()
@@ -548,10 +568,13 @@ class MainWindow(QMainWindow):
 
     def _ground_succeeded(self, result) -> None:
         self._ground_result = result
+        self._mdt_preview = None
+        self.export_mdt_button.setEnabled(False)
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
+            "MANTO R20.5" if getattr(result, "engine_name", "") == "Universal Ground R20.5"
+            else "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
             else "MANTO R20.3" if getattr(result.model, "continuity", None) is not None
             else "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
             else "MANTO R20",
@@ -616,9 +639,11 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.2",
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
+            "Universal Ground R20.5",
         }:
             revision = (
-                "R20.4" if engine == "Universal Ground R20.4"
+                "R20.5" if engine == "Universal Ground R20.5"
+                else "R20.4" if engine == "Universal Ground R20.4"
                 else "R20.3" if engine == "L3 Ground Continuity R20.3"
                 else "R20.2" if engine == "L3 Ground Continuity R20.2"
                 else "R20.1" if engine == "L3 Inverted Ground R20.1"
@@ -782,19 +807,60 @@ class MainWindow(QMainWindow):
         self._export_worker = worker
         worker.start()
 
-    def export_ground_mdt(self) -> None:
+    def create_mdt_preview(self) -> None:
+        """Compute terrain before choosing an output path. No file is written."""
         if (
             self._cloud is None
             or self._ground_result is None
+            or self._mdt_preview_worker is not None
             or self._mdt_worker is not None
         ):
             return
-        source = self._cloud.path
-        suggested = source.with_name(source.stem + "_MDT_R20_4.tif")
-        filename, _ = QFileDialog.getSaveFileName(
+        self._mdt_preview = None
+        self.export_mdt_button.setEnabled(False)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self._busy(True, "R20.5: calcular MDT para pré-visualização...")
+        worker = MDTPreviewWorker(
+            self._cloud.path,
+            self._ground_result,
+            0.25, 0.75,
             self,
-            "Criar MDT do Ground",
-            str(suggested),
+        )
+        worker.progress_changed.connect(self._set_progress)
+        worker.completed.connect(self._mdt_preview_succeeded)
+        worker.failed.connect(self._mdt_preview_failed)
+        worker.finished.connect(self._mdt_preview_finished)
+        self._mdt_preview_worker = worker
+        worker.start()
+
+    def _mdt_preview_succeeded(self, preview) -> None:
+        self._mdt_preview = preview
+        self.viewer.show_mdt_preview(preview.browser_payload(max_side=256))
+        self.statusBar().showMessage(
+            "MDT em memória · 3D disponível · exportação ainda não realizada"
+        )
+
+    def _mdt_preview_failed(self, message: str) -> None:
+        self._mdt_preview = None
+        self.statusBar().showMessage("Falhou a criação da pré-visualização MDT")
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT PREVIEW", message)
+
+    def _mdt_preview_finished(self) -> None:
+        worker = self._mdt_preview_worker
+        self._mdt_preview_worker = None
+        self._busy(False)
+        if worker is not None:
+            worker.deleteLater()
+
+    def export_ground_mdt(self) -> None:
+        """Export precisely the reviewed 3D MDT, never reclassify on Save."""
+        if self._mdt_preview is None or self._mdt_worker is not None:
+            return
+        source = self._mdt_preview.source
+        suggested = source.with_name(source.stem + "_MDT_R20_5.tif")
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "EXPORTAR MDT aprovado", str(suggested),
             "GeoTIFF (*.tif *.tiff)",
         )
         if not filename:
@@ -802,17 +868,17 @@ class MainWindow(QMainWindow):
         output = Path(filename)
         if output.suffix.lower() not in {".tif", ".tiff"}:
             output = output.with_suffix(".tif")
-
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.4: criar MDT a partir do Ground...")
+        self._busy(True, "R20.5: exportar MDT validado...")
         worker = MDTExportWorker(
             source,
             output,
             self._ground_result,
-            0.25,
-            0.75,
+            self._mdt_preview.resolution_m,
+            self._mdt_preview.max_gap_m,
             self,
+            preview=self._mdt_preview,
         )
         worker.progress_changed.connect(self._set_progress)
         worker.completed.connect(self._mdt_succeeded)
