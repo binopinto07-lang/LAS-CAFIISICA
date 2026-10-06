@@ -176,6 +176,7 @@ class L3GroundLabModel:
     return_evidence_enabled: bool = True
     mantle: object | None = None
     continuity: object | None = None
+    measured_ground_cells: np.ndarray | None = None
 
     @property
     def synthetic_fill_point_count(
@@ -888,6 +889,10 @@ def run_l3_ground_lab(
         return_evidence_enabled=return_evidence_enabled,
         mantle=mantle,
         continuity=continuity,
+        measured_ground_cells=(
+            np.zeros_like(mantle.observed, dtype=np.bool_)
+            if mantle is not None else None
+        ),
     )
 
     totals = {
@@ -975,6 +980,27 @@ def run_l3_ground_lab(
             y,
             z,
         )
+        if model.measured_ground_cells is not None and mantle is not None:
+            accepted_ground = evidence.classifications() == GROUND_CLASS
+            finite_ground = (
+                accepted_ground
+                & np.isfinite(x)
+                & np.isfinite(y)
+                & np.isfinite(z)
+            )
+            if np.any(finite_ground):
+                ix = np.floor(
+                    (x[finite_ground] - mantle.origin[0]) / mantle.cell_size
+                ).astype(np.int64)
+                iy = np.floor(
+                    (y[finite_ground] - mantle.origin[1]) / mantle.cell_size
+                ).astype(np.int64)
+                inside = (
+                    (ix >= 0) & (ix < mantle.nx)
+                    & (iy >= 0) & (iy < mantle.ny)
+                )
+                if np.any(inside):
+                    model.measured_ground_cells[iy[inside], ix[inside]] = True
         if collect_gate_diagnostics:
             (
                 chunk_diagnostics,
