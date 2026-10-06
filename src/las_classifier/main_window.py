@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "Universal Ground R20.6",
                 "Universal Ground R20.5.1",
                 "Universal Ground R20.4",
                 "L3 Ground Continuity R20.3",
@@ -93,7 +94,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Universal Ground R20.5.1")
+        self.engine_combo.setCurrentText("Universal Ground R20.6")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -174,7 +175,7 @@ class MainWindow(QMainWindow):
         self.ground_button.setEnabled(False)
         self.ground_button.clicked.connect(self.run_ground_engine)
 
-        self.export_button = QPushButton("EXPORT GROUND ONLY")
+        self.export_button = QPushButton("EXPORT GROUND")
         self.export_button.setEnabled(False)
         self.export_button.clicked.connect(self.export_ground_only)
         self.mantle_export_button = QPushButton("EXPORT MANTO (LAZ)")
@@ -493,7 +494,9 @@ class MainWindow(QMainWindow):
         self,
         engine: str,
     ) -> None:
-        measured_l3 = engine in {
+        complete_ground = engine == "Universal Ground R20.6"
+        measured_only = engine in {
+            "Universal Ground R20.6",
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
             "L3 Ground Continuity R20.3",
@@ -502,16 +505,23 @@ class MainWindow(QMainWindow):
             "L3 Dense Ground R19",
             "L3 Ground Lab",
         }
-        if measured_l3:
+        if complete_ground:
+            self.include_synthetic.setChecked(True)
+            if self.fill_spacing_spin.value() <= 0.0:
+                self.fill_spacing_spin.setValue(0.25)
+        elif measured_only:
             self.include_synthetic.setChecked(False)
             self.fill_spacing_spin.setValue(0.0)
-        self.include_synthetic.setEnabled(
-            not measured_l3
-        )
-        self.fill_spacing_spin.setEnabled(
-            not measured_l3
-        )
-        universal = engine in {"Universal Ground R20.5.1", "Universal Ground R20.4"}
+
+        self.include_synthetic.setEnabled(not measured_only)
+        self.fill_spacing_spin.setEnabled(not measured_only)
+
+        universal = engine in {
+            "Universal Ground R20.6",
+            "Universal Ground R20.6",
+            "Universal Ground R20.5.1",
+            "Universal Ground R20.4",
+        }
         if universal:
             self.source_combo.setCurrentText("Auto detect")
         self.source_combo.setEnabled(not universal)
@@ -573,7 +583,8 @@ class MainWindow(QMainWindow):
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.5.1" if getattr(result, "engine_name", "") == "Universal Ground R20.5.1"
+            "MANTO R20.6 (R20.4 PRESERVADO)" if getattr(result, "engine_name", "") == "Universal Ground R20.6"
+            else "MANTO R20.5.1" if getattr(result, "engine_name", "") == "Universal Ground R20.5.1"
             else "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
             else "MANTO R20.3" if getattr(result.model, "continuity", None) is not None
             else "MANTO R20.1" if getattr(mantle, "veto_guard", None) is not None
@@ -583,8 +594,10 @@ class MainWindow(QMainWindow):
         lines = [
             "",
             f"GROUND ENGINE RESULT — {engine}",
-            f"Real ground: {getattr(result, 'ground_count', 0):,}",
-            f"Rejected: {getattr(result, 'non_ground_count', 0):,}",
+            f"Ground medido: {getattr(result, 'ground_count', 0):,}",
+            f"Ground reconstruído: {getattr(result, 'synthetic_fill_point_count', 0):,}",
+            f"FINAL GROUND: {getattr(result, 'ground_count', 0) + getattr(result, 'synthetic_fill_point_count', 0):,}",
+            f"Rejected source points: {getattr(result, 'non_ground_count', 0):,}",
         ]
 
         analysis = getattr(result, "analysis", None)
@@ -640,9 +653,11 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
+            "Universal Ground R20.6",
         }:
             revision = (
-                "R20.5.1" if engine == "Universal Ground R20.5.1"
+                "R20.6" if engine == "Universal Ground R20.6"
+                else "R20.5.1" if engine == "Universal Ground R20.5.1"
                 else "R20.4" if engine == "Universal Ground R20.4"
                 else "R20.3" if engine == "L3 Ground Continuity R20.3"
                 else "R20.2" if engine == "L3 Ground Continuity R20.2"
@@ -677,6 +692,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
+            "Universal Ground R20.6",
         }:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
@@ -693,9 +709,10 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
+            "Universal Ground R20.6",
         }:
             lines.extend((
-                f"{'R20.5.1' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
+                f"{'R20.6' if engine == 'Universal Ground R20.6' else 'R20.5.1' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
                 f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
                 f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
@@ -712,6 +729,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
+            "Universal Ground R20.6",
         }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
@@ -723,7 +741,24 @@ class MainWindow(QMainWindow):
                 f"  Observed ambiguous cells: {result.mantle_ambiguous_cells:,}",
                 f"  Possible unobserved Ground under returns: {result.mantle_possible_unobserved_cells:,}",
                 "  To inspect the 2.5-D mantle use EXPORT MANTO (LAZ).",
-                "  Inferred mantle is never written by EXPORT GROUND ONLY.",
+                (
+                    "  R20.6 uses explicit NO_GROUND_OBSERVATION mantle cells as reconstructed Ground."
+                    if engine == "Universal Ground R20.6"
+                    else "  Inferred mantle is never written by measured-only exports."
+                ),
+            ))
+
+        if engine == "Universal Ground R20.6":
+            model = result.model
+            lines.extend((
+                "R20.6 RECONSTRUCTED GROUND:",
+                f"  Reconstructed XY cells: {getattr(model, 'reconstructed_cell_count', 0):,}",
+                f"  Empty/inferred mantle cells: {getattr(model, 'reconstructed_inferred_cell_count', 0):,}",
+                f"  Ground-not-observed under returns: {getattr(model, 'reconstructed_hidden_cell_count', 0):,}",
+                f"  Synthetic Ground points: {getattr(model, 'synthetic_fill_point_count', 0):,}",
+                f"  Effective synthetic spacing: {getattr(model, 'effective_fill_spacing', 0.0):.3f} m",
+                "  Reconstructed points are class 2 but GroundSource=2; they are NOT measured observations.",
+                "  FINAL GROUND viewport includes measured + reconstructed mantle Ground.",
             ))
 
         if hasattr(result, "source_type"):
