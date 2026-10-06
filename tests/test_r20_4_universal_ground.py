@@ -36,7 +36,7 @@ def test_universal_wrapper_never_requires_lidar(monkeypatch):
     assert universal_ground.run_universal_ground(object()) == "ok"
     assert captured["require_lidar"] is False
     assert captured["source_override"] is None
-    assert captured["revision_label"] == "R20.5"
+    assert captured["revision_label"] == "R20.5.1"
 
 
 def test_r204_comparator_keeps_previous_revision(monkeypatch):
