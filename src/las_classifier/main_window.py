@@ -936,7 +936,8 @@ class MainWindow(QMainWindow):
             + info["mdt"]
             + "\n\nEstado de observação:\n"
             + info["observation_state"]
-            + "\n\n1 = Ground medido; 2 = MDT interpolado; 0 = sem Ground observado.",
+            + "\n\n1 = Ground medido; 2 = Ground reconstruído do MANTO; "
+            + "3 = interpolação apenas do MDT; 0 = sem Ground.",
         )
 
     def _mdt_failed(self, message: str) -> None:
