@@ -22,8 +22,8 @@ from .paths import cache_root, converter_executable
 
 LOGGER = logging.getLogger("las_cafiisica.viewer.converter")
 ProgressCallback = Callable[[int, str], None]
-SOURCE_CACHE_REVISION = 2
-CLASSIFIED_VIEWER_CACHE_REVISION = 4
+SOURCE_CACHE_REVISION = 3
+CLASSIFIED_VIEWER_CACHE_REVISION = 5
 VIEWER_MAX_ORIGINAL_POINTS = 25_000_000
 VIEWER_MAX_GROUND_POINTS = 14_000_000
 VIEWER_MAX_NON_GROUND_POINTS = 5_000_000
@@ -219,7 +219,6 @@ def _write_original_viewer_laz(
         )
         processed = 0
         written = 0
-        ordinal = 0
 
         try:
             with laspy.open(
@@ -232,18 +231,15 @@ def _write_original_viewer_laz(
                     2_000_000
                 ):
                     count = len(points)
-                    local = np.arange(
-                        count,
-                        dtype=np.int64,
+                    local = np.arange(count, dtype=np.int64)
+                    keep = _spatial_hash_sample_indices(
+                        local,
+                        points.X,
+                        points.Y,
+                        points.Z,
+                        stride=stride,
+                        salt=0x4F524947,
                     )
-                    keep = local[
-                        (
-                            (ordinal + local)
-                            % stride
-                        )
-                        == 0
-                    ]
-                    ordinal += count
 
                     if keep.size:
                         selected = points[keep]
@@ -311,16 +307,41 @@ def _write_original_viewer_laz(
     return output
 
 
-def _sample_class_indices(
+def _spatial_hash_sample_indices(
     indices: np.ndarray,
+    raw_x: np.ndarray,
+    raw_y: np.ndarray,
+    raw_z: np.ndarray,
     *,
-    seen_before: int,
     stride: int,
+    salt: int = 0,
 ) -> np.ndarray:
+    """Order-independent viewer decimation.
+
+    Point-index stride sampling produced visible P1 bands/holes because source
+    point order is spatially structured. Hashing integer XYZ keeps roughly the
+    same cap while breaking that aliasing and is invariant to input order.
+    """
+    indices = np.asarray(indices, dtype=np.int64)
     if indices.size == 0 or stride <= 1:
         return indices
-    ordinal = seen_before + np.arange(indices.size, dtype=np.int64)
-    return indices[(ordinal % stride) == 0]
+
+    x = np.asarray(raw_x, dtype=np.int64)[indices].astype(np.uint64, copy=False)
+    y = np.asarray(raw_y, dtype=np.int64)[indices].astype(np.uint64, copy=False)
+    z = np.asarray(raw_z, dtype=np.int64)[indices].astype(np.uint64, copy=False)
+
+    h = (
+        x * np.uint64(0x9E3779B185EBCA87)
+        ^ y * np.uint64(0xC2B2AE3D27D4EB4F)
+        ^ z * np.uint64(0x165667B19E3779F9)
+        ^ np.uint64(int(salt) & 0xFFFFFFFFFFFFFFFF)
+    )
+    h ^= h >> np.uint64(30)
+    h *= np.uint64(0xBF58476D1CE4E5B9)
+    h ^= h >> np.uint64(27)
+    h *= np.uint64(0x94D049BB133111EB)
+    h ^= h >> np.uint64(31)
+    return indices[(h % np.uint64(stride)) == 0]
 
 
 def _classify_points(model, points, x, y, z) -> np.ndarray:
@@ -381,8 +402,6 @@ def _write_classified_viewer_laz(
         total = int(reader.header.point_count)
         chunk_size = int(getattr(model.params, "chunk_size", 2_000_000))
 
-        ground_seen = 0
-        non_ground_seen = 0
         measured_written = 0
 
         try:
@@ -410,22 +429,26 @@ def _write_classified_viewer_laz(
                     non_ground_idx = np.flatnonzero(
                         classes == NON_GROUND_CLASS
                     )
-                    keep_ground = _sample_class_indices(
+                    keep_ground = _spatial_hash_sample_indices(
                         ground_idx,
-                        seen_before=ground_seen,
+                        points.X,
+                        points.Y,
+                        points.Z,
                         stride=ground_stride,
+                        salt=0x47524F554E44,
                     )
-                    ground_seen += int(ground_idx.size)
 
                     if ground_only:
                         keep = keep_ground
                     else:
-                        keep_non_ground = _sample_class_indices(
+                        keep_non_ground = _spatial_hash_sample_indices(
                             non_ground_idx,
-                            seen_before=non_ground_seen,
+                            points.X,
+                            points.Y,
+                            points.Z,
                             stride=non_ground_stride,
+                            salt=0x4E4F4E47524F554E,
                         )
-                        non_ground_seen += int(non_ground_idx.size)
                         keep = np.sort(
                             np.concatenate(
                                 (keep_ground, keep_non_ground)
