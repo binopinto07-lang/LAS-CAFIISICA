@@ -96,7 +96,7 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "Universal Ground R20.6":
+            if self.engine_name == "Universal Ground R20.6.2":
                 result = run_universal_ground(self.cloud, self.params, callback)
             elif self.engine_name == "Universal Ground R20.5.1":
                 result = run_universal_ground_r2051(
