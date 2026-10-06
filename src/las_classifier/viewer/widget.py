@@ -249,6 +249,7 @@ class PointCloudViewer(QWidget):
             "mantle": False,
         }
         self._mantle_available = False
+        self._mdt_available = False
         self.mantle_button.setEnabled(False)
         self.mdt_button.setEnabled(False)
         self.mdt_mode_combo.setEnabled(False)
