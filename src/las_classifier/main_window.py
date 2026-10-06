@@ -136,7 +136,7 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setSpecialValueText("Auto")
 
         self.include_synthetic = QCheckBox(
-            "Include reconstructed ground"
+            "FINAL GROUND = medido + MANTO reconstruído"
         )
         self.include_synthetic.setChecked(True)
         self.engine_combo.currentTextChanged.connect(
@@ -496,7 +496,6 @@ class MainWindow(QMainWindow):
     ) -> None:
         complete_ground = engine == "Universal Ground R20.6"
         measured_only = engine in {
-            "Universal Ground R20.6",
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
             "L3 Ground Continuity R20.3",
@@ -517,7 +516,6 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setEnabled(not measured_only)
 
         universal = engine in {
-            "Universal Ground R20.6",
             "Universal Ground R20.6",
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
@@ -719,7 +717,11 @@ class MainWindow(QMainWindow):
                 f"  Connected measured XY cells: {result.continuity_connected_cells:,}",
                 f"  Additional linked XY cells: {result.continuity_expanded_cells:,}",
                 f"  Roof/canopy cells blocked: {result.continuity_blocked_cells:,}",
-                "  No unobserved cells or artificial Ground are accepted.",
+                (
+                    "  Continuity itself accepts measured cells only; R20.6 reconstruction is added separately afterwards."
+                    if engine == "Universal Ground R20.6"
+                    else "  No unobserved cells or artificial Ground are accepted."
+                ),
             ))
 
         if engine in {
@@ -816,7 +818,7 @@ class MainWindow(QMainWindow):
         suggested = source.with_name(source.stem + suffix)
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Ground Only",
+            "Export Ground",
             str(suggested),
             "LAZ (*.laz);;LAS (*.las)",
         )
@@ -858,7 +860,7 @@ class MainWindow(QMainWindow):
         self.export_mdt_button.setEnabled(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.5.1: calcular MDT para pré-visualização...")
+        self._busy(True, "R20.6: calcular MDT para pré-visualização...")
         worker = MDTPreviewWorker(
             self._cloud.path,
             self._ground_result,
@@ -896,7 +898,7 @@ class MainWindow(QMainWindow):
         if self._mdt_preview is None or self._mdt_worker is not None:
             return
         source = self._mdt_preview.source
-        suggested = source.with_name(source.stem + "_MDT_R20_5_1.tif")
+        suggested = source.with_name(source.stem + "_MDT_R20_6.tif")
         filename, _ = QFileDialog.getSaveFileName(
             self, "EXPORTAR MDT aprovado", str(suggested),
             "GeoTIFF (*.tif *.tiff)",
@@ -908,7 +910,7 @@ class MainWindow(QMainWindow):
             output = output.with_suffix(".tif")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.5.1: exportar MDT validado...")
+        self._busy(True, "R20.6: exportar MDT validado...")
         worker = MDTExportWorker(
             source,
             output,
@@ -929,7 +931,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"MDT concluído: {info['mdt']}")
         QMessageBox.information(
             self,
-            "LAS-CAFIISICA — MDT R20.5.1",
+            "LAS-CAFIISICA — MDT R20.6",
             "MDT criado:\n"
             + info["mdt"]
             + "\n\nEstado de observação:\n"
@@ -939,7 +941,7 @@ class MainWindow(QMainWindow):
 
     def _mdt_failed(self, message: str) -> None:
         self.statusBar().showMessage("MDT falhou")
-        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.5.1", message)
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.6", message)
 
     def _mdt_finished(self) -> None:
         worker = self._mdt_worker
