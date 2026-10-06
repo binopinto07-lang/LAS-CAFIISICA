@@ -13,7 +13,7 @@ def test_r20_6_is_default_engine_and_mdt_requires_preview_before_export():
     assert 'QPushButton("CRIAR MDT (PREVIEW)")' in ui
     assert 'QPushButton("EXPORTAR MDT VALIDADO")' in ui
     assert "self._mdt_preview is not None" in ui
-    assert 'self.engine_name == "Universal Ground R20.5.1"' in worker
+    assert 'self.engine_name == "Universal Ground R20.6"' in worker
 
 
 def test_self_test_exercises_mdt_and_rasterio():
