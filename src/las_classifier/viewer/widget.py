@@ -9,6 +9,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QComboBox,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -53,11 +54,19 @@ class PointCloudViewer(QWidget):
             "mantle": False,
         }
         self._mantle_available = False
+        self._mdt_available = False
 
         self.original_button = QPushButton("ORIGINAL")
         self.classified_button = QPushButton("FINAL GROUND")
         self.mantle_button = QPushButton("MANTO R20")
         self.both_button = QPushButton("COMPARAR")
+        self.mdt_button = QPushButton("MDT 3D")
+        self.mdt_button.setEnabled(False)
+        self.mdt_mode_combo = QComboBox()
+        self.mdt_mode_combo.addItems(["ELEVAÇÃO MDT", "HILLSHADE", "OBSERVAÇÃO"])
+        self.mdt_mode_combo.setEnabled(False)
+        self.mdt_mode_combo.currentIndexChanged.connect(self._mdt_colors)
+        self.mdt_button.clicked.connect(lambda: self.set_view_mode("mdt"))
         self.fit_button = QPushButton("ENQUADRAR")
         self.rgb_button = QPushButton("RGB")
         self.elevation_button = QPushButton("ELEVAÇÃO")
@@ -97,6 +106,8 @@ class PointCloudViewer(QWidget):
         toolbar.addWidget(self.classified_button)
         toolbar.addWidget(self.both_button)
         toolbar.addWidget(self.mantle_button)
+        toolbar.addWidget(self.mdt_button)
+        toolbar.addWidget(self.mdt_mode_combo)
         toolbar.addStretch(1)
         toolbar.addWidget(self.fit_button)
         toolbar.addWidget(self.rgb_button)
@@ -148,6 +159,33 @@ class PointCloudViewer(QWidget):
         else:
             self.mantle_requested.emit()
 
+    def _mdt_colors(self, index: int) -> None:
+        modes = ("elevation", "hillshade", "observation")
+        if self._mdt_available and 0 <= index < len(modes):
+            self._run_js(
+                "window.LASViewer.setMDTColorMode("
+                + json.dumps(modes[index])
+                + ");"
+            )
+
+    def show_mdt_preview(self, payload: dict) -> None:
+        """Display a measured/interpolated 3D terrain mesh before exporting."""
+        self._mdt_available = True
+        self.mdt_button.setEnabled(True)
+        self.mdt_mode_combo.setEnabled(True)
+        self.mdt_mode_combo.setCurrentIndex(0)
+        self._run_js(
+            "window.LASViewer.showMDTPreview("
+            + json.dumps(payload, separators=(",", ":"), allow_nan=False)
+            + ");"
+        )
+
+    def clear_mdt_preview(self) -> None:
+        self._mdt_available = False
+        self.mdt_button.setEnabled(False)
+        self.mdt_mode_combo.setEnabled(False)
+        self._run_js("window.LASViewer.clearMDTPreview();")
+
     def load_cloud(
         self,
         key: str,
@@ -187,7 +225,7 @@ class PointCloudViewer(QWidget):
         self._run_js(script)
 
     def set_view_mode(self, mode: str) -> None:
-        if mode not in {"original", "classified", "mantle", "both"}:
+        if mode not in {"original", "classified", "mantle", "both", "mdt"}:
             return
         self._run_js(
             "window.LASViewer.setViewMode("
@@ -212,6 +250,8 @@ class PointCloudViewer(QWidget):
         }
         self._mantle_available = False
         self.mantle_button.setEnabled(False)
+        self.mdt_button.setEnabled(False)
+        self.mdt_mode_combo.setEnabled(False)
         self.original_button.setEnabled(False)
         self.classified_button.setEnabled(False)
         self.both_button.setEnabled(False)
