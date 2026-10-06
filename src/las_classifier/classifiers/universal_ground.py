@@ -29,7 +29,7 @@ ENGINE_NAME = "Universal Ground R20.5.1"
 REVISION = "R20.5.1"
 
 
-def _r205_continuity_builder(context, mantle, progress):
+def _r2051_continuity_builder(context, mantle, progress):
     """Block elevated islands in continuity WITHOUT changing the R20 mantle.
 
     The mantle and its original R20.1 veto remain byte-for-byte independent.
@@ -69,7 +69,7 @@ def run_universal_ground(
     """Run one geometry-first procedure for every supported point-cloud source.
 
     P1 is deliberately NOT redirected to a simpler engine.  When no physical
-    Ground point exists below vegetation, R20.5 may support an MDT gap later,
+    Ground point exists below vegetation, R20.5.1 may support an MDT gap later,
     but this classifier never fabricates that point as measured Ground.
     """
     return run_l3_ground_lab(
@@ -79,7 +79,7 @@ def run_universal_ground(
         source_override=None,
         context_builder=_dense_context,
         mantle_builder=_mantle_with_guard,
-        continuity_builder=_r205_continuity_builder,
+        continuity_builder=_r2051_continuity_builder,
         engine_name=ENGINE_NAME,
         revision_label=REVISION,
         collect_gate_diagnostics=True,
