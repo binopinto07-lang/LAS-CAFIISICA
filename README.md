@@ -75,3 +75,17 @@ only when the complete dense grid proves a meaningful multi-return population.
 After classification the application can create an EPSG:3763 MDT plus a
 separate observation-state GeoTIFF distinguishing measured Ground from
 raster-only interpolation. See [R20_4_LEIA_ME.md](R20_4_LEIA_ME.md).
+
+
+## R20.5 — Elevated-object veto + MDT preview (experimental)
+
+Branch `r20-5-ground-veto-mdt-preview` keeps one universal P1/L3/UNKNOWN
+classification pipeline but adds a measured-neighbour multiscale veto for
+suspended/elevated surfaces that can otherwise ride the PTD/mantle. The new
+veto is applied before continuity recovery and never uses original class 2 as
+terrain authority.
+
+The MDT workflow is now review-first: **CRIAR MDT (PREVIEW)** computes the
+terrain in memory and shows a 3D mesh with Elevation, Hillshade and Observation
+modes. **EXPORTAR MDT VALIDADO** is enabled only after a preview exists and
+writes the exact reviewed MDT. See `R20_5_LEIA_ME.md`.
