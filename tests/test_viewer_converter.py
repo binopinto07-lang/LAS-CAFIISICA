@@ -11,6 +11,7 @@ from las_classifier.classifiers.smrf import (
 )
 from las_classifier.cloud.loader import load_cloud
 from las_classifier.viewer.converter import (
+    _spatial_hash_sample_indices,
     _write_classified_viewer_laz,
     _write_original_viewer_laz,
 )
@@ -151,3 +152,46 @@ def test_original_viewer_is_normalized_for_potree_bounds(tmp_path):
     )
     assert np.all(xyz >= mins - 0.001)
     assert np.all(xyz <= maxs + 0.001)
+
+
+def test_viewer_sampling_is_spatial_and_point_order_invariant():
+    n = 5000
+    raw_x = np.arange(n, dtype=np.int64) * 3 + 101
+    raw_y = (np.arange(n, dtype=np.int64) * 17) % 1009
+    raw_z = (np.arange(n, dtype=np.int64) * 31) % 503
+    idx = np.arange(n, dtype=np.int64)
+
+    keep = _spatial_hash_sample_indices(
+        idx, raw_x, raw_y, raw_z, stride=11, salt=123,
+    )
+    selected = {
+        (int(raw_x[i]), int(raw_y[i]), int(raw_z[i]))
+        for i in keep
+    }
+
+    permutation = np.arange(n - 1, -1, -1, dtype=np.int64)
+    px = raw_x[permutation]
+    py = raw_y[permutation]
+    pz = raw_z[permutation]
+    pidx = np.arange(n, dtype=np.int64)
+    keep_permuted = _spatial_hash_sample_indices(
+        pidx, px, py, pz, stride=11, salt=123,
+    )
+    selected_permuted = {
+        (int(px[i]), int(py[i]), int(pz[i]))
+        for i in keep_permuted
+    }
+
+    assert selected == selected_permuted
+    assert 0 < len(selected) < n
+
+
+def test_viewer_no_longer_uses_point_ordinal_stride():
+    from pathlib import Path
+
+    source = Path("src/las_classifier/viewer/converter.py").read_text(
+        encoding="utf-8"
+    )
+    assert "ordinal + local" not in source
+    assert "seen_before" not in source
+    assert "_spatial_hash_sample_indices" in source
