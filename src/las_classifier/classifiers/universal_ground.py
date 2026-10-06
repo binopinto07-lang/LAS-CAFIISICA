@@ -93,6 +93,10 @@ class UniversalCompleteGroundModel:
     def reconstructed_hidden_cell_count(self) -> int:
         return int(self.reconstruction.hidden_ground_cell_count)
 
+    @property
+    def reconstructed_reliable_missing_cell_count(self) -> int:
+        return int(self.reconstruction.reliable_missing_cell_count)
+
     def iter_synthetic_fill_xyz(self, chunk_points: int = 500_000):
         yield from self.reconstruction.iter_xyz(chunk_points=chunk_points)
 
@@ -148,6 +152,7 @@ def run_universal_ground(
     )
     reconstruction = build_mantle_ground_reconstruction(
         result.model.mantle,
+        measured_ground_cells=result.model.measured_ground_cells,
         spacing_m=spacing,
     )
     model = UniversalCompleteGroundModel(
