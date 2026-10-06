@@ -80,7 +80,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
-                "Universal Ground R20.6",
+                "Universal Ground R20.6.2",
                 "Universal Ground R20.5.1",
                 "Universal Ground R20.4",
                 "L3 Ground Continuity R20.3",
@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Universal Ground R20.6")
+        self.engine_combo.setCurrentText("Universal Ground R20.6.2")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -494,7 +494,7 @@ class MainWindow(QMainWindow):
         self,
         engine: str,
     ) -> None:
-        complete_ground = engine == "Universal Ground R20.6"
+        complete_ground = engine == "Universal Ground R20.6.2"
         measured_only = engine in {
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
@@ -516,7 +516,7 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setEnabled(not measured_only)
 
         universal = engine in {
-            "Universal Ground R20.6",
+            "Universal Ground R20.6.2",
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
         }
@@ -581,7 +581,7 @@ class MainWindow(QMainWindow):
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.6 (R20.4 PRESERVADO)" if getattr(result, "engine_name", "") == "Universal Ground R20.6"
+            "MANTO R20.6.2 (R20.4 PRESERVADO)" if getattr(result, "engine_name", "") == "Universal Ground R20.6.2"
             else "MANTO R20.5.1" if getattr(result, "engine_name", "") == "Universal Ground R20.5.1"
             else "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
             else "MANTO R20.3" if getattr(result.model, "continuity", None) is not None
@@ -651,10 +651,10 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
-            "Universal Ground R20.6",
+            "Universal Ground R20.6.2",
         }:
             revision = (
-                "R20.6" if engine == "Universal Ground R20.6"
+                "R20.6.2" if engine == "Universal Ground R20.6.2"
                 else "R20.5.1" if engine == "Universal Ground R20.5.1"
                 else "R20.4" if engine == "Universal Ground R20.4"
                 else "R20.3" if engine == "L3 Ground Continuity R20.3"
@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
-            "Universal Ground R20.6",
+            "Universal Ground R20.6.2",
         }:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
@@ -707,10 +707,10 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
-            "Universal Ground R20.6",
+            "Universal Ground R20.6.2",
         }:
             lines.extend((
-                f"{'R20.6' if engine == 'Universal Ground R20.6' else 'R20.5.1' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
+                f"{'R20.6.2' if engine == 'Universal Ground R20.6.2' else 'R20.5.1' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
                 f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
                 f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
@@ -718,8 +718,8 @@ class MainWindow(QMainWindow):
                 f"  Additional linked XY cells: {result.continuity_expanded_cells:,}",
                 f"  Roof/canopy cells blocked: {result.continuity_blocked_cells:,}",
                 (
-                    "  Continuity itself accepts measured cells only; R20.6 reconstruction is added separately afterwards."
-                    if engine == "Universal Ground R20.6"
+                    "  Continuity itself accepts measured cells only; R20.6.2 reconstruction is added separately afterwards."
+                    if engine == "Universal Ground R20.6.2"
                     else "  No unobserved cells or artificial Ground are accepted."
                 ),
             ))
@@ -731,7 +731,7 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
-            "Universal Ground R20.6",
+            "Universal Ground R20.6.2",
         }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
@@ -744,16 +744,16 @@ class MainWindow(QMainWindow):
                 f"  Possible unobserved Ground under returns: {result.mantle_possible_unobserved_cells:,}",
                 "  To inspect the 2.5-D mantle use EXPORT MANTO (LAZ).",
                 (
-                    "  R20.6 uses explicit NO_GROUND_OBSERVATION mantle cells as reconstructed Ground."
-                    if engine == "Universal Ground R20.6"
+                    "  R20.6.2 uses explicit NO_GROUND_OBSERVATION mantle cells as reconstructed Ground."
+                    if engine == "Universal Ground R20.6.2"
                     else "  Inferred mantle is never written by measured-only exports."
                 ),
             ))
 
-        if engine == "Universal Ground R20.6":
+        if engine == "Universal Ground R20.6.2":
             model = result.model
             lines.extend((
-                "R20.6 RECONSTRUCTED GROUND:",
+                "R20.6.2 RECONSTRUCTED GROUND:",
                 f"  Reconstructed XY cells: {getattr(model, 'reconstructed_cell_count', 0):,}",
                 f"  Empty/inferred mantle cells: {getattr(model, 'reconstructed_inferred_cell_count', 0):,}",
                 f"  Ground-not-observed under returns: {getattr(model, 'reconstructed_hidden_cell_count', 0):,}",
@@ -861,7 +861,7 @@ class MainWindow(QMainWindow):
         self.export_mdt_button.setEnabled(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.6: calcular MDT para pré-visualização...")
+        self._busy(True, "R20.6.2: calcular MDT para pré-visualização...")
         worker = MDTPreviewWorker(
             self._cloud.path,
             self._ground_result,
@@ -911,7 +911,7 @@ class MainWindow(QMainWindow):
             output = output.with_suffix(".tif")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.6: exportar MDT validado...")
+        self._busy(True, "R20.6.2: exportar MDT validado...")
         worker = MDTExportWorker(
             source,
             output,
@@ -932,7 +932,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"MDT concluído: {info['mdt']}")
         QMessageBox.information(
             self,
-            "LAS-CAFIISICA — MDT R20.6",
+            "LAS-CAFIISICA — MDT R20.6.2",
             "MDT criado:\n"
             + info["mdt"]
             + "\n\nEstado de observação:\n"
@@ -943,7 +943,7 @@ class MainWindow(QMainWindow):
 
     def _mdt_failed(self, message: str) -> None:
         self.statusBar().showMessage("MDT falhou")
-        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.6", message)
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.6.2", message)
 
     def _mdt_finished(self) -> None:
         worker = self._mdt_worker
