@@ -82,3 +82,38 @@ def test_cannot_export_a_preview_from_another_source(tmp_path):
     )
     with pytest.raises(ValueError, match="another LAS"):
         export_ground_mdt(tmp_path / "other.las", tmp_path / "out.tif", None, preview=preview)
+
+
+def test_mdt_marks_reconstructed_ground_separately(tmp_path):
+    source = tmp_path / "tiny_complete.las"
+    header = laspy.LasHeader(point_format=3, version="1.2")
+    header.add_crs(CRS.from_epsg(3763))
+    cloud = laspy.LasData(header)
+    cloud.x = np.array([0.0, 1.0], dtype=np.float64)
+    cloud.y = np.array([0.0, 0.0], dtype=np.float64)
+    cloud.z = np.array([10.0, 10.0], dtype=np.float64)
+    cloud.write(source)
+
+    class CompleteModel:
+        params = SimpleNamespace(chunk_size=1000)
+
+        @staticmethod
+        def classify_points(points, x, y, z):
+            return np.array([2] * len(x), dtype=np.uint8)
+
+        @staticmethod
+        def iter_synthetic_fill_xyz():
+            yield (
+                np.array([0.5], dtype=np.float64),
+                np.array([0.0], dtype=np.float64),
+                np.array([10.0], dtype=np.float64),
+            )
+
+    preview = build_ground_mdt_preview(
+        source,
+        CompleteModel(),
+        resolution_m=0.5,
+        max_gap_m=0.0,
+    )
+    assert preview.reconstructed_points == 1
+    assert 2 in set(preview.state.ravel().tolist())
