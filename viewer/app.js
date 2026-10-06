@@ -7,6 +7,9 @@
     viewMode: "original",
     materialMode: "rgb",
     autoFitted: false,
+    mdtMesh: null,
+    mdtPreview: null,
+    mdtColorMode: "elevation",
   };
 
   const status = (text) => {
@@ -141,7 +144,139 @@
     state.clouds.delete(key);
   }
 
+  function removeMDT() {
+    if (!state.mdtMesh || !state.viewer) return;
+    const mesh = state.mdtMesh;
+    state.viewer.scene.scene.remove(mesh);
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+    state.mdtMesh = null;
+    state.mdtPreview = null;
+  }
+
+  function buildMDTGeometry(data) {
+    if (typeof THREE === "undefined") {
+      throw new Error("Three.js não está disponível no Potree");
+    }
+    const nx = data.width;
+    const ny = data.height;
+    if (nx < 2 || ny < 2 || data.z.length !== nx * ny ||
+        data.state.length !== nx * ny || nx * ny > 350000) {
+      throw new Error("Dimensões inválidas na pré-visualização MDT");
+    }
+    const valid = data.z.filter((v) => v !== null && Number.isFinite(v));
+    if (!valid.length) throw new Error("MDT sem células válidas");
+    const minZ = Math.min(...valid);
+    const maxZ = Math.max(...valid);
+    const positions = new Float32Array(nx * ny * 3);
+    const colors = new Float32Array(nx * ny * 3);
+    const cell = data.resolution_m;
+
+    for (let r = 0; r < ny; r++) {
+      for (let c = 0; c < nx; c++) {
+        const i = r * nx + c;
+        const z = data.z[i];
+        positions[i * 3] = c * cell;
+        positions[i * 3 + 1] = -r * cell;
+        positions[i * 3 + 2] = z === null ? 0 : z - minZ;
+      }
+    }
+    const triangles = [];
+    for (let r = 0; r + 1 < ny; r++) {
+      for (let c = 0; c + 1 < nx; c++) {
+        const a = r * nx + c;
+        const b = a + 1;
+        const d = a + nx;
+        const e = d + 1;
+        // Never bridge nodata; missing Ground stays a real hole in the mesh.
+        if (data.state[a] > 0 && data.state[b] > 0 &&
+            data.state[d] > 0 && data.z[a] !== null &&
+            data.z[b] !== null && data.z[d] !== null) {
+          triangles.push(a, d, b);
+        }
+        if (data.state[b] > 0 && data.state[d] > 0 &&
+            data.state[e] > 0 && data.z[b] !== null &&
+            data.z[d] !== null && data.z[e] !== null) {
+          triangles.push(b, d, e);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(triangles);
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      })
+    );
+    mesh.position.set(data.xmin, data.ymax, minZ);
+    mesh.frustumCulled = false;
+    mesh.userData.mdtMin = minZ;
+    mesh.userData.mdtMax = maxZ;
+    return mesh;
+  }
+
+  function setMDTColorMode(mode) {
+    if (!state.mdtMesh || !state.mdtPreview) return;
+    if (!["elevation", "hillshade", "observation"].includes(mode)) return;
+    const data = state.mdtPreview;
+    const colors = state.mdtMesh.geometry.getAttribute("color");
+    const minZ = state.mdtMesh.userData.mdtMin;
+    const maxZ = state.mdtMesh.userData.mdtMax;
+    const nx = data.width;
+    const ny = data.height;
+
+    const zAt = (r, c, defaultZ) => {
+      const i = Math.min(ny - 1, Math.max(0, r)) * nx +
+                Math.min(nx - 1, Math.max(0, c));
+      return data.z[i] === null ? defaultZ : data.z[i];
+    };
+    for (let r = 0; r < ny; r++) {
+      for (let c = 0; c < nx; c++) {
+        const i = r * nx + c;
+        const z = data.z[i];
+        if (z === null) {
+          colors.setXYZ(i, 0, 0, 0);
+          continue;
+        }
+        if (mode === "observation") {
+          if (data.state[i] === 1) colors.setXYZ(i, 0.20, 0.74, 0.33);
+          else colors.setXYZ(i, 0.95, 0.68, 0.22);
+        } else if (mode === "hillshade") {
+          const dx = (zAt(r, c + 1, z) - zAt(r, c - 1, z)) / (2 * data.resolution_m);
+          const dy = (zAt(r - 1, c, z) - zAt(r + 1, c, z)) / (2 * data.resolution_m);
+          const mag = Math.sqrt(dx * dx + dy * dy + 1);
+          const light = Math.max(0.08, (0.5 * -dx + 0.4 * -dy + 0.77) / mag);
+          colors.setXYZ(i, light, light, light);
+        } else {
+          const t = Math.max(0, Math.min(1, (z - minZ) / Math.max(0.001, maxZ - minZ)));
+          colors.setXYZ(i, 0.14 + 0.7 * t, 0.34 + 0.45 * t, 0.74 - 0.57 * t);
+        }
+      }
+    }
+    colors.needsUpdate = true;
+    state.mdtColorMode = mode;
+    status("MDT R20.5 · " + mode + " · verde=medido / amarelo=interpolado na vista Observação");
+  }
+
+  function showMDTPreview(data) {
+    if (!state.viewer) throw new Error("Viewer ainda não inicializado");
+    removeMDT();
+    state.mdtPreview = data;
+    state.mdtMesh = buildMDTGeometry(data);
+    state.viewer.scene.scene.add(state.mdtMesh);
+    setMDTColorMode("elevation");
+    setViewMode("mdt");
+    status("MDT R20.5 calculado em memória · pré-visualização 3D · exportação pendente");
+  }
+
   function applyViewMode() {
+    if (state.mdtMesh) state.mdtMesh.visible = state.viewMode === "mdt";
     for (const [key, entry] of state.clouds.entries()) {
       if (state.viewMode === "both") {
         // Do not overlay the *inferred* mantle onto measured Ground by default.
@@ -242,7 +377,7 @@
 
   function setViewMode(mode) {
     if (
-      !["original", "classified", "mantle", "both"].includes(
+      !["original", "classified", "mantle", "both", "mdt"].includes(
         mode
       )
     ) {
@@ -268,6 +403,7 @@
   }
 
   function clear() {
+    removeMDT();
     Array.from(state.clouds.keys()).forEach(
       removeCloud
     );
@@ -297,6 +433,8 @@
 
   window.LASViewer = {
     loadCloud,
+    showMDTPreview,
+    setMDTColorMode,
     setViewMode,
     setMaterialMode,
     fit,
