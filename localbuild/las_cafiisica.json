@@ -82,6 +82,14 @@
     ],
     "build": [
       {
+        "id": "verify-ground-v2-source",
+        "name": "Verificar fonte Ground Engine V2",
+        "command": "$expected='LAS_CAFIISICA_GROUND_V2_2026_10_R20_5'; $p=Join-Path '%REPO%' 'localbuild/SOURCE_REVISION.txt'; if (!(Test-Path $p)) { throw ('SOURCE_REVISION em falta: ' + $p) }; $actual=(Get-Content $p -Raw).Trim(); if ($actual -ne $expected) { throw ('Fonte errada. Esperado ' + $expected + ', encontrado ' + $actual) }; Write-Output ('OK SOURCE: ' + $actual)",
+        "timeout_minutes": 2,
+        "category": "test",
+        "venv": "test"
+      },
+      {
         "id": "deps-build",
         "name": "Instalar dependencias de build",
         "command": "& '%PYTHON%' -m pip install --upgrade pip; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '%PYTHON%' -m pip install -e '.[dev]'",
@@ -247,7 +255,7 @@
     ]
   },
   "release": {},
-  "config_revision": 43,
+  "config_revision": 44,
   "required_paths": [
     "pyproject.toml",
     "src/las_classifier/app.py",
