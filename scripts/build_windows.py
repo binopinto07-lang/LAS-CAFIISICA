@@ -137,6 +137,8 @@ def main() -> int:
         "pyproj",
         "--collect-all",
         "scipy",
+        "--collect-all",
+        "rasterio",
         "--hidden-import",
         "PySide6.QtWebEngineWidgets",
         "--hidden-import",
