@@ -308,14 +308,14 @@ class MDTPreviewWorker(QThread):
                 max_gap_m=self.max_gap_m,
             )
         except Exception as exc:
-            LOGGER.exception("R20.5.1 MDT preview failed")
+            LOGGER.exception("R20.6.3 MDT preview failed")
             self.failed.emit(str(exc))
             return
         self.completed.emit(preview)
 
 
 class MDTExportWorker(QThread):
-    """Export reviewed R20.5.1 MDT + observation-state raster."""
+    """Export reviewed R20.6.3 MDT + observation-state raster."""
 
     completed = Signal(object)
     failed = Signal(str)
@@ -351,7 +351,7 @@ class MDTExportWorker(QThread):
                 preview=self.preview,
             )
         except Exception as exc:
-            LOGGER.exception("R20.5.1 MDT export failed")
+            LOGGER.exception("R20.6.3 MDT export failed")
             self.failed.emit(str(exc))
             return
         self.completed.emit(info)
