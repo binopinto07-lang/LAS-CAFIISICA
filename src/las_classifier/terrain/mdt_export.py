@@ -110,7 +110,7 @@ def _model_surface_mdt_preview(
     max_gap_m: float,
     max_cells: int,
 ) -> MDTPreview | None:
-    """Fast R20.6.2 path: build MDT from the already solved terrain model.
+    """Fast R20.7 path: build MDT from the already solved terrain model.
 
     No second pass over the 318M-point source is required. Measured Ground uses
     the preserved mantle surface in cells where points survived FINAL GROUND;
@@ -126,11 +126,11 @@ def _model_surface_mdt_preview(
     reconstructed = np.asarray(reconstruction.fill_mask, dtype=np.bool_)
     shape = (int(mantle.ny), int(mantle.nx))
     if measured.shape != shape or reconstructed.shape != shape:
-        raise ValueError("R20.6.2 model-surface MDT shape mismatch")
+        raise ValueError("R20.7 model-surface MDT shape mismatch")
 
     support = measured | reconstructed
     if not np.any(support):
-        raise ValueError("R20.6.2 model contains no Ground support cells")
+        raise ValueError("R20.7 model contains no Ground support cells")
 
     source_surface = np.full(shape, np.nan, dtype=np.float32)
     mantle_surface = np.asarray(mantle.surface, dtype=np.float32).reshape(shape)
@@ -249,7 +249,7 @@ def build_ground_mdt_preview(
     with laspy.open(source) as reader:
         crs = reader.header.parse_crs()
         if crs is None or crs.to_epsg() != 3763:
-            raise ValueError("R20.6.2 MDT requires declared EPSG:3763")
+            raise ValueError("R20.7 MDT requires declared EPSG:3763")
 
     fast_preview = _model_surface_mdt_preview(
         source,
@@ -260,7 +260,7 @@ def build_ground_mdt_preview(
     )
     if fast_preview is not None:
         if progress is not None:
-            progress(100, "R20.6.2 MDT: preview criado do modelo Ground")
+            progress(100, "R20.7 MDT: preview criado do modelo Ground")
         return fast_preview
 
     with laspy.open(source) as reader:
@@ -303,7 +303,7 @@ def build_ground_mdt_preview(
             if progress is not None and total:
                 progress(
                     int(75 * processed / total),
-                    f"R20.6.2 MDT: Ground {processed:,}/{total:,}",
+                    f"R20.7 MDT: Ground {processed:,}/{total:,}",
                 )
 
     measured_count = count.reshape(height, width)
@@ -387,7 +387,7 @@ def write_ground_mdt(
         import rasterio
         from rasterio.transform import from_origin
     except ImportError as exc:
-        raise RuntimeError("R20.6.2 MDT export requires rasterio") from exc
+        raise RuntimeError("R20.7 MDT export requires rasterio") from exc
 
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() not in {".tif", ".tiff"}:
@@ -410,7 +410,7 @@ def write_ground_mdt(
         "compress": "deflate", "tiled": True,
     }
     if progress is not None:
-        progress(50, "R20.6.2 MDT: escrever GeoTIFF")
+        progress(50, "R20.7 MDT: escrever GeoTIFF")
     with rasterio.open(output, "w", **profile) as dst:
         dst.write(
             np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32),
@@ -419,7 +419,7 @@ def write_ground_mdt(
         dst.set_band_description(1, "MDT elevation metres")
 
     if progress is not None:
-        progress(75, "R20.6.2 MDT: escrever mapa Observado/Interpolado")
+        progress(75, "R20.7 MDT: escrever mapa Observado/Interpolado")
     state_profile = dict(profile, dtype="uint8", nodata=255)
     with rasterio.open(state_path, "w", **state_profile) as dst:
         dst.write(state.astype(np.uint8), 1)
@@ -430,7 +430,7 @@ def write_ground_mdt(
         )
 
     result = {
-        "algorithm": "LAS_CAFIISICA_MDT_R20_6_2",
+        "algorithm": "LAS_CAFIISICA_MDT_R20_7",
         "source": str(preview.source),
         "mdt": str(output),
         "observation_state": str(state_path),
@@ -449,9 +449,9 @@ def write_ground_mdt(
     report_path.write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    LOGGER.info("R20_6_2_MDT=%s", output)
+    LOGGER.info("R20_7_MDT=%s", output)
     if progress is not None:
-        progress(100, "R20.6.2 MDT exportado")
+        progress(100, "R20.7 MDT exportado")
     return result
 
 
