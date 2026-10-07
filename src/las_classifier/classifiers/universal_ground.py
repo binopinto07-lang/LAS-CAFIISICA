@@ -91,6 +91,7 @@ def _r207_continuity_builder(context, mantle, progress):
     )
     continuity = build_ground_continuity(context, mantle, combined_guard)
     continuity.final_veto = final_veto
+    continuity.terrain_guard = tin_guard
     if progress is not None:
         progress(
             58,
