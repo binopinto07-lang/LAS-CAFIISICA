@@ -154,6 +154,7 @@ def build_seed_tin_ground_guard(
 
     valid_seed = (
         observed
+        & reliable
         & np.isfinite(lower)
         & (counts >= cfg.min_returns)
         & ~existing_blocked
