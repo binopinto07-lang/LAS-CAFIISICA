@@ -6,14 +6,14 @@ def test_windows_build_collects_rasterio_runtime():
     assert '"--collect-all",\n        "rasterio"' in source
 
 
-def test_r20_6_2_is_default_engine_and_mdt_requires_preview_before_export():
+def test_r20_7_is_default_engine_and_mdt_requires_preview_before_export():
     ui = Path("src/las_classifier/main_window.py").read_text(encoding="utf-8")
     worker = Path("src/las_classifier/cloud/classification_worker.py").read_text(encoding="utf-8")
-    assert 'self.engine_combo.setCurrentText("Universal Ground R20.6.2")' in ui
+    assert 'self.engine_combo.setCurrentText("Universal Ground R20.7")' in ui
     assert 'QPushButton("CRIAR MDT (PREVIEW)")' in ui
     assert 'QPushButton("EXPORTAR MDT VALIDADO")' in ui
     assert "self._mdt_preview is not None" in ui
-    assert 'self.engine_name == "Universal Ground R20.6.2"' in worker
+    assert 'self.engine_name == "Universal Ground R20.7"' in worker
 
 
 def test_self_test_exercises_mdt_and_rasterio():
