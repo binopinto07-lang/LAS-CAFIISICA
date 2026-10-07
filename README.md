@@ -122,3 +122,13 @@ measured Ground support.
 MDT Preview now uses the already solved Ground/mantle/reconstruction model and
 does not perform a second classification pass over the full LAS/LAZ. See
 `R20_6_2_LEIA_ME.md`.
+
+
+## R20.7 — LOW-SEED TIN (experimental)
+
+Branch `r20-7-seed-tin-growth` adds an independent conservative terrain guard:
+coarse low measured seeds -> Delaunay terrain TIN -> normal distance/angle
+compatibility -> iterative connected Ground growth. Cells clearly above the
+low-seed TIN are blocked before continuity, while true depressions and
+breaklines are protected. R20.6.2 object/vertical veto, Ground Complete
+reconstruction and FAST MDT preview are retained. See `R20_7_LEIA_ME.md`.
