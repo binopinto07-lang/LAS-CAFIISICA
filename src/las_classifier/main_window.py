@@ -762,6 +762,20 @@ class MainWindow(QMainWindow):
                 ),
             ))
 
+        if engine == "Universal Ground R20.7":
+            continuity = getattr(result.model, "continuity", None)
+            tin_guard = getattr(continuity, "terrain_guard", None)
+            if tin_guard is not None:
+                lines.extend((
+                    "R20.7 LOW-SEED TIN:",
+                    f"  Low seeds: {getattr(tin_guard, 'seed_count', 0):,}",
+                    f"  Cells inside seed TIN: {int(getattr(tin_guard, 'inside_tin', []).sum()) if hasattr(getattr(tin_guard, 'inside_tin', None), 'sum') else 0:,}",
+                    f"  Progressively accepted cells: {int(getattr(tin_guard, 'accepted', []).sum()) if hasattr(getattr(tin_guard, 'accepted', None), 'sum') else 0:,}",
+                    f"  High cells blocked by TIN: {getattr(tin_guard, 'blocked_cell_count', 0):,}",
+                    f"  Growth passes: {getattr(tin_guard, 'expansion_steps', 0):,}",
+                    "  Original class 2 and return number are not seed authority.",
+                ))
+
         if engine in {"Universal Ground R20.7", "Universal Ground R20.6.2"}:
             model = result.model
             lines.extend((
