@@ -204,56 +204,58 @@ def build_seed_tin_ground_guard(
             seed_count=int(seed_r.size), expansion_steps=0,
         )
 
-    rr, cc = np.nonzero(observed & np.isfinite(lower))
-    query_xy = np.column_stack((
-        grid.origin[0] + (cc.astype(np.float64) + 0.5) * grid.cell_size,
-        grid.origin[1] + (rr.astype(np.float64) + 0.5) * grid.cell_size,
-    ))
-    simplex = tin.find_simplex(query_xy)
-    inside = simplex >= 0
-    if not np.any(inside):
-        return SeedTINGroundGuard(
-            origin=np.asarray(grid.origin, dtype=np.float64).copy(),
-            cell_size=float(grid.cell_size),
-            nx=int(grid.nx), ny=int(grid.ny),
-            seed_cells=seed_mask, accepted=accepted, blocked=blocked,
-            inside_tin=inside_tin, normal_distance=normal_distance,
-            seed_count=int(seed_r.size), expansion_steps=0,
-        )
-
-    qidx = np.flatnonzero(inside)
-    simp = simplex[inside]
-    qxy = query_xy[inside]
-    transform = tin.transform[simp]
-    bary2 = np.einsum(
-        "nij,nj->ni",
-        transform[:, :2, :],
-        qxy - transform[:, 2, :],
-    )
-    bary = np.column_stack((bary2, 1.0 - bary2.sum(axis=1)))
-    vertices = tin.simplices[simp]
-    zref = np.sum(seed_z[vertices] * bary, axis=1)
-
-    gx_all, gy_all = _triangle_gradients(seed_xy, seed_z, tin.simplices)
-    gx = gx_all[simp]
-    gy = gy_all[simp]
-    norm = np.sqrt(1.0 + gx * gx + gy * gy)
-    residual = (lower[rr[inside], cc[inside]] - zref) / np.maximum(norm, 1.0)
-
-    inside_tin[rr[inside], cc[inside]] = True
-    normal_distance[rr[inside], cc[inside]] = residual.astype(np.float32)
-
-    mantle_gx = sx[rr[inside], cc[inside]]
-    mantle_gy = sy[rr[inside], cc[inside]]
-    n1 = np.column_stack((-gx, -gy, np.ones_like(gx)))
-    n2 = np.column_stack((-mantle_gx, -mantle_gy, np.ones_like(mantle_gx)))
-    cosine = np.sum(n1 * n2, axis=1) / (
-        np.linalg.norm(n1, axis=1) * np.linalg.norm(n2, axis=1)
-    )
-    angle_ok_values = cosine >= cos(radians(cfg.max_angle_deg))
-
+    flat_cells = np.flatnonzero(observed & np.isfinite(lower))
     angle_ok = np.zeros(shape, dtype=np.bool_)
-    angle_ok[rr[inside], cc[inside]] = angle_ok_values
+    gx_all, gy_all = _triangle_gradients(seed_xy, seed_z, tin.simplices)
+
+    # Query the dense raster in bounded chunks. A 3M-cell grid must not create
+    # several simultaneous 3M x triangle-transform temporary arrays.
+    query_chunk = 250_000
+    for start_cell in range(0, flat_cells.size, query_chunk):
+        ids = flat_cells[start_cell:start_cell + query_chunk]
+        rr = ids // int(grid.nx)
+        cc = ids % int(grid.nx)
+        query_xy = np.column_stack((
+            grid.origin[0] + (cc.astype(np.float64) + 0.5) * grid.cell_size,
+            grid.origin[1] + (rr.astype(np.float64) + 0.5) * grid.cell_size,
+        ))
+        simplex = tin.find_simplex(query_xy)
+        inside = simplex >= 0
+        if not np.any(inside):
+            continue
+
+        vr = rr[inside]
+        vc = cc[inside]
+        simp = simplex[inside]
+        qxy = query_xy[inside]
+        transform = tin.transform[simp]
+        bary2 = np.einsum(
+            "nij,nj->ni",
+            transform[:, :2, :],
+            qxy - transform[:, 2, :],
+        )
+        bary = np.column_stack((bary2, 1.0 - bary2.sum(axis=1)))
+        vertices = tin.simplices[simp]
+        zref = np.sum(seed_z[vertices] * bary, axis=1)
+
+        gx = gx_all[simp]
+        gy = gy_all[simp]
+        norm = np.sqrt(1.0 + gx * gx + gy * gy)
+        residual = (lower[vr, vc] - zref) / np.maximum(norm, 1.0)
+
+        inside_tin[vr, vc] = True
+        normal_distance[vr, vc] = residual.astype(np.float32)
+
+        mantle_gx = sx[vr, vc]
+        mantle_gy = sy[vr, vc]
+        n1 = np.column_stack((-gx, -gy, np.ones_like(gx)))
+        n2 = np.column_stack(
+            (-mantle_gx, -mantle_gy, np.ones_like(mantle_gx))
+        )
+        cosine = np.sum(n1 * n2, axis=1) / (
+            np.linalg.norm(n1, axis=1) * np.linalg.norm(n2, axis=1)
+        )
+        angle_ok[vr, vc] = cosine >= cos(radians(cfg.max_angle_deg))
 
     compatible = (
         inside_tin
