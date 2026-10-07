@@ -68,7 +68,11 @@ def _r207_continuity_builder(context, mantle, progress):
         progress(55, "R20.7: low-seed grid + terrain TIN")
 
     object_guard = build_elevated_surface_guard(context, mantle)
-    tin_guard = build_seed_tin_ground_guard(context, mantle)
+    tin_guard = build_seed_tin_ground_guard(
+        context,
+        mantle,
+        extra_blocked=object_guard.blocked,
+    )
     blocked = (
         np.asarray(object_guard.blocked, dtype=np.bool_)
         | np.asarray(tin_guard.blocked, dtype=np.bool_)
