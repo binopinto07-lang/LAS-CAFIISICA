@@ -129,3 +129,19 @@ def test_seed_selection_is_not_based_on_original_class_or_returns():
     assert "class2" not in source.lower()
     assert "return_number" not in source
     assert "number_of_returns" not in source
+
+
+def test_object_veto_cells_cannot_become_low_seeds():
+    grid, mantle = _grid_and_mantle()
+    extra = np.zeros((grid.ny, grid.nx), dtype=bool)
+    extra[:8, :8] = True
+
+    guard = build_seed_tin_ground_guard(
+        grid,
+        mantle,
+        config=SeedTINGrowthConfig(seed_cell_m=8.0),
+        extra_blocked=extra,
+    )
+
+    assert not guard.seed_cells[:8, :8].any()
+    assert guard.seed_count >= 3
