@@ -35,6 +35,7 @@ LAS/LAZ
 - return number is not required;
 - P1 and L3 use the same R20.7 pipeline;
 - seed points are the physically measured LOW cell in each coarse XY block;
+- cells already blocked by the elevated-object guard cannot become LOW-SEED;
 - cells far ABOVE the low-seed TIN are vetoed;
 - cells below a coarse TIN are never rejected solely for being below it;
 - breakline cells are protected from the new hard TIN veto;
