@@ -11,6 +11,8 @@ import laspy
 import numpy as np
 from scipy.ndimage import distance_transform_edt, zoom
 
+from ..cloud.crs import WORKING_CRS, WORKING_EPSG
+
 LOGGER = logging.getLogger("las_cafiisica.terrain.mdt_export")
 ProgressCallback = Callable[[int, str], None]
 GROUND_CLASS = np.uint8(2)
@@ -32,6 +34,41 @@ def _classify(model, points, x, y, z) -> np.ndarray:
     if method is not None:
         return method(points, x, y, z)
     return model.classify_xyz(x, y, z)
+
+
+def _log_source_crs_diagnostic(source: Path) -> None:
+    """Inspect LAS CRS defensively; WORKING_CRS remains authoritative.
+
+    Some photogrammetric LAS files contain malformed/legacy GeoKeys. A broken
+    header must never prevent MDT preview generation because LAS-CAFIISICA
+    already operates in the fixed project CRS.
+    """
+    LOGGER.info("MDT_CRS_SOURCE=WORKING_CRS MDT_CRS=%s", WORKING_CRS)
+    try:
+        with laspy.open(source) as reader:
+            header_crs = reader.header.parse_crs()
+    except Exception as exc:
+        LOGGER.warning("LAS_HEADER_CRS_INVALID=%s", exc)
+        return
+
+    if header_crs is None:
+        LOGGER.warning("LAS_HEADER_CRS_MISSING using=%s", WORKING_CRS)
+        return
+
+    try:
+        epsg = header_crs.to_epsg()
+    except Exception as exc:
+        LOGGER.warning("LAS_HEADER_CRS_UNREADABLE=%s using=%s", exc, WORKING_CRS)
+        return
+
+    if epsg != WORKING_EPSG:
+        LOGGER.warning(
+            "LAS_HEADER_CRS_IGNORED=%s expected=%s",
+            header_crs.to_string(),
+            WORKING_CRS,
+        )
+    else:
+        LOGGER.info("LAS_HEADER_CRS_OK=%s", WORKING_CRS)
 
 
 def fill_small_mdt_gaps(
@@ -246,10 +283,7 @@ def build_ground_mdt_preview(
     if not source.is_file():
         raise FileNotFoundError(source)
 
-    with laspy.open(source) as reader:
-        crs = reader.header.parse_crs()
-        if crs is None or crs.to_epsg() != 3763:
-            raise ValueError("R20.6.2 MDT requires declared EPSG:3763")
+    _log_source_crs_diagnostic(source)
 
     fast_preview = _model_surface_mdt_preview(
         source,
@@ -260,7 +294,7 @@ def build_ground_mdt_preview(
     )
     if fast_preview is not None:
         if progress is not None:
-            progress(100, "R20.6.2 MDT: preview criado do modelo Ground")
+            progress(100, "R20.6.3 MDT: preview criado do modelo Ground")
         return fast_preview
 
     with laspy.open(source) as reader:
@@ -303,7 +337,7 @@ def build_ground_mdt_preview(
             if progress is not None and total:
                 progress(
                     int(75 * processed / total),
-                    f"R20.6.2 MDT: Ground {processed:,}/{total:,}",
+                    f"R20.6.3 MDT: Ground {processed:,}/{total:,}",
                 )
 
     measured_count = count.reshape(height, width)
@@ -387,7 +421,7 @@ def write_ground_mdt(
         import rasterio
         from rasterio.transform import from_origin
     except ImportError as exc:
-        raise RuntimeError("R20.6.2 MDT export requires rasterio") from exc
+        raise RuntimeError("R20.6.3 MDT export requires rasterio") from exc
 
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() not in {".tif", ".tiff"}:
@@ -405,12 +439,12 @@ def write_ground_mdt(
     profile = {
         "driver": "GTiff", "width": int(elevation.shape[1]),
         "height": int(elevation.shape[0]), "count": 1,
-        "dtype": "float32", "crs": "EPSG:3763",
+        "dtype": "float32", "crs": WORKING_CRS,
         "transform": transform, "nodata": float(nodata),
         "compress": "deflate", "tiled": True,
     }
     if progress is not None:
-        progress(50, "R20.6.2 MDT: escrever GeoTIFF")
+        progress(50, "R20.6.3 MDT: escrever GeoTIFF")
     with rasterio.open(output, "w", **profile) as dst:
         dst.write(
             np.where(np.isfinite(elevation), elevation, nodata).astype(np.float32),
@@ -419,7 +453,7 @@ def write_ground_mdt(
         dst.set_band_description(1, "MDT elevation metres")
 
     if progress is not None:
-        progress(75, "R20.6.2 MDT: escrever mapa Observado/Interpolado")
+        progress(75, "R20.6.3 MDT: escrever mapa Observado/Interpolado")
     state_profile = dict(profile, dtype="uint8", nodata=255)
     with rasterio.open(state_path, "w", **state_profile) as dst:
         dst.write(state.astype(np.uint8), 1)
@@ -430,11 +464,11 @@ def write_ground_mdt(
         )
 
     result = {
-        "algorithm": "LAS_CAFIISICA_MDT_R20_6_2",
+        "algorithm": "LAS_CAFIISICA_MDT_R20_6_3",
         "source": str(preview.source),
         "mdt": str(output),
         "observation_state": str(state_path),
-        "crs": "EPSG:3763",
+        "crs": WORKING_CRS,
         "resolution_m": float(preview.resolution_m),
         "max_gap_m": float(preview.max_gap_m),
         "ground_points": int(preview.ground_points),
@@ -449,9 +483,9 @@ def write_ground_mdt(
     report_path.write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    LOGGER.info("R20_6_2_MDT=%s", output)
+    LOGGER.info("R20_6_3_MDT=%s", output)
     if progress is not None:
-        progress(100, "R20.6.2 MDT exportado")
+        progress(100, "R20.6.3 MDT exportado")
     return result
 
 
