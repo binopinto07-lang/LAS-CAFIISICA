@@ -49,6 +49,7 @@ LAS/LAZ
 - high-cell block threshold: 0.58 m;
 - max local normal angle: 38 degrees;
 - max growth iterations: 24;
+- Ground erosion around hard elevated objects: 0.60 m;
 
 These are experimental defaults for field testing, not final universal values.
 
