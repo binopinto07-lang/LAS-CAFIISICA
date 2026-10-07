@@ -696,6 +696,7 @@ class MainWindow(QMainWindow):
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
             "Universal Ground R20.6.2",
+            "Universal Ground R20.7",
         }:
             lines.extend((
                 "R20.1 POST-DECISION GROUND VETO:",
@@ -713,9 +714,10 @@ class MainWindow(QMainWindow):
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
             "Universal Ground R20.6.2",
+            "Universal Ground R20.7",
         }:
             lines.extend((
-                f"{'R20.6.2' if engine == 'Universal Ground R20.6.2' else 'R20.5.1' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
+                f"{'R20.7' if engine == 'Universal Ground R20.7' else 'R20.6.2' if engine == 'Universal Ground R20.6.2' else 'R20.5.1' if engine == 'Universal Ground R20.5.1' else 'R20.4' if engine == 'Universal Ground R20.4' else 'R20.3' if engine == 'L3 Ground Continuity R20.3' else 'R20.2'} MEASURED GROUND CONTINUITY:",
                 f"  Real points recovered by 3D continuity: {result.continuity_recovered_count:,}",
                 f"  Source class2 recovered by continuity: {result.continuity_recovered_class2_count:,}",
                 f"  Confirmed starting cells: {result.continuity_anchor_cells:,}",
@@ -723,7 +725,9 @@ class MainWindow(QMainWindow):
                 f"  Additional linked XY cells: {result.continuity_expanded_cells:,}",
                 f"  Roof/canopy cells blocked: {result.continuity_blocked_cells:,}",
                 (
-                    "  Continuity itself accepts measured cells only; R20.6.2 reconstruction is added separately afterwards."
+                    "  Continuity accepts measured cells only; R20.7 reconstruction is added separately afterwards."
+                    if engine == "Universal Ground R20.7"
+                    else "  Continuity itself accepts measured cells only; R20.6.2 reconstruction is added separately afterwards."
                     if engine == "Universal Ground R20.6.2"
                     else "  No unobserved cells or artificial Ground are accepted."
                 ),
@@ -737,6 +741,7 @@ class MainWindow(QMainWindow):
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
             "Universal Ground R20.6.2",
+            "Universal Ground R20.7",
         }:
             lines.extend((
                 "R20 INVERTED MANTLE (EXPERIMENTAL; SYNTHETIC=0):",
