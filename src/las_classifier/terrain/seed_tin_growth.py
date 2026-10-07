@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from math import cos, radians
 
 import numpy as np
+from scipy.ndimage import binary_dilation
 from scipy.spatial import Delaunay, QhullError
 
 LOGGER = logging.getLogger("las_cafiisica.terrain.seed_tin_growth")
@@ -38,6 +39,7 @@ class SeedTINGrowthConfig:
     max_angle_deg: float = 38.0
     max_iterations: int = 24
     min_growth_neighbours: int = 1
+    erosion_radius_m: float = 0.60
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +294,17 @@ def build_seed_tin_ground_guard(
         & (normal_distance > cfg.block_above_normal_m)
         & ~accepted
     )
+
+    # Conservative "erosion" of the Ground candidate around elevated objects:
+    # expand NON-GROUND by a small metric radius, similar in intent to keeping
+    # tree/building stumps out of a DTM. Never consume seed cells or breaklines.
+    radius_cells = max(
+        0,
+        int(np.ceil(max(0.0, cfg.erosion_radius_m) / float(grid.cell_size))),
+    )
+    if radius_cells > 0 and np.any(blocked):
+        blocked = binary_dilation(blocked, iterations=radius_cells)
+        blocked &= observed & inside_tin & ~breakline & ~seed_mask
 
     LOGGER.info(
         "R20_7_SEED_TIN seeds=%d inside=%d accepted=%d blocked=%d passes=%d",
