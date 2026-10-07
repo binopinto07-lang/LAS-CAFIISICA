@@ -1,6 +1,7 @@
 """R20.5 preview must never write raster before user explicitly exports it."""
 from types import SimpleNamespace
 
+import logging
 import laspy
 import numpy as np
 import pytest
@@ -175,3 +176,55 @@ def test_r20_6_2_fast_mdt_uses_solved_model_without_reclassifying_source(tmp_pat
     assert 2 in states
     assert 3 not in states
     assert np.isfinite(preview.elevation[preview.state > 0]).all()
+
+
+def test_r20_6_3_invalid_las_crs_does_not_block_fast_mdt(tmp_path, monkeypatch, caplog):
+    """Regression: malformed EPSG GeoKey must not abort MDT preview."""
+    source = tmp_path / "invalid_crs_header.las"
+    header = laspy.LasHeader(point_format=3, version="1.2")
+    cloud = laspy.LasData(header)
+    cloud.x = np.array([1000.0, 1001.0], dtype=np.float64)
+    cloud.y = np.array([2000.0, 2001.0], dtype=np.float64)
+    cloud.z = np.array([100.0, 100.1], dtype=np.float64)
+    cloud.write(source)
+
+    def broken_parse_crs(_header, *args, **kwargs):
+        raise RuntimeError(
+            "Invalid projection: EPSG:11108: "
+            "(Internal Proj Error: proj_create: crs not found: EPSG:11108)"
+        )
+
+    monkeypatch.setattr(laspy.LasHeader, "parse_crs", broken_parse_crs)
+    caplog.set_level(logging.INFO, logger="las_cafiisica.terrain.mdt_export")
+
+    shape = (2, 2)
+    surface = np.array([[100.0, 100.1], [100.2, 100.3]], dtype=np.float32)
+    model = SimpleNamespace(
+        mantle=SimpleNamespace(
+            origin=np.array([1000.0, 2000.0]),
+            cell_size=0.5,
+            nx=2,
+            ny=2,
+            surface=surface,
+        ),
+        reconstruction=SimpleNamespace(
+            fill_mask=np.zeros(shape, dtype=bool),
+            surface=surface.copy(),
+        ),
+        measured_ground_cells=np.ones(shape, dtype=bool),
+        measured_ground_point_count=4,
+        synthetic_fill_point_count=0,
+    )
+
+    preview = build_ground_mdt_preview(
+        source,
+        model,
+        resolution_m=0.25,
+        max_gap_m=0.0,
+    )
+
+    assert isinstance(preview, MDTPreview)
+    assert np.isfinite(preview.elevation[preview.state > 0]).all()
+    assert "MDT_CRS_SOURCE=WORKING_CRS MDT_CRS=EPSG:3763" in caplog.text
+    assert "LAS_HEADER_CRS_INVALID=" in caplog.text
+    assert "EPSG:11108" in caplog.text
