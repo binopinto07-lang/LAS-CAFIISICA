@@ -128,6 +128,7 @@ def build_seed_tin_ground_guard(
     mantle,
     *,
     config: SeedTINGrowthConfig | None = None,
+    extra_blocked: np.ndarray | None = None,
 ) -> SeedTINGroundGuard:
     cfg = config or SeedTINGrowthConfig()
     shape = (int(grid.ny), int(grid.nx))
@@ -151,6 +152,11 @@ def build_seed_tin_ground_guard(
             np.asarray(veto.roof_candidate, dtype=np.bool_)
             | np.asarray(veto.canopy_candidate, dtype=np.bool_)
         )
+    if extra_blocked is not None:
+        extra = np.asarray(extra_blocked, dtype=np.bool_)
+        if extra.shape != shape:
+            raise ValueError("R20.7 extra-blocked shape mismatch")
+        existing_blocked |= extra
 
     valid_seed = (
         observed
