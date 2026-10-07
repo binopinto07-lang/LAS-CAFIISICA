@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(
             [
+                "Universal Ground R20.7",
                 "Universal Ground R20.6.2",
                 "Universal Ground R20.5.1",
                 "Universal Ground R20.4",
@@ -94,7 +95,7 @@ class MainWindow(QMainWindow):
                 "SMRF Legacy",
             ]
         )
-        self.engine_combo.setCurrentText("Universal Ground R20.6.2")
+        self.engine_combo.setCurrentText("Universal Ground R20.7")
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(
@@ -494,7 +495,7 @@ class MainWindow(QMainWindow):
         self,
         engine: str,
     ) -> None:
-        complete_ground = engine == "Universal Ground R20.6.2"
+        complete_ground = engine in {"Universal Ground R20.7", "Universal Ground R20.6.2"}
         measured_only = engine in {
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
@@ -516,6 +517,7 @@ class MainWindow(QMainWindow):
         self.fill_spacing_spin.setEnabled(not measured_only)
 
         universal = engine in {
+            "Universal Ground R20.7",
             "Universal Ground R20.6.2",
             "Universal Ground R20.5.1",
             "Universal Ground R20.4",
@@ -581,7 +583,8 @@ class MainWindow(QMainWindow):
         mantle = getattr(result.model, "mantle", None)
         self.viewer.set_mantle_available(
             mantle is not None,
-            "MANTO R20.6.2 (R20.4 PRESERVADO)" if getattr(result, "engine_name", "") == "Universal Ground R20.6.2"
+            "MANTO R20.7 (R20.4 PRESERVADO)" if getattr(result, "engine_name", "") == "Universal Ground R20.7"
+            else "MANTO R20.6.2 (R20.4 PRESERVADO)" if getattr(result, "engine_name", "") == "Universal Ground R20.6.2"
             else "MANTO R20.5.1" if getattr(result, "engine_name", "") == "Universal Ground R20.5.1"
             else "MANTO R20.4" if getattr(result, "engine_name", "") == "Universal Ground R20.4"
             else "MANTO R20.3" if getattr(result.model, "continuity", None) is not None
@@ -651,10 +654,12 @@ class MainWindow(QMainWindow):
             "L3 Ground Continuity R20.3",
             "Universal Ground R20.4",
             "Universal Ground R20.5.1",
+            "Universal Ground R20.7",
             "Universal Ground R20.6.2",
         }:
             revision = (
-                "R20.6.2" if engine == "Universal Ground R20.6.2"
+                "R20.7" if engine == "Universal Ground R20.7"
+                else "R20.6.2" if engine == "Universal Ground R20.6.2"
                 else "R20.5.1" if engine == "Universal Ground R20.5.1"
                 else "R20.4" if engine == "Universal Ground R20.4"
                 else "R20.3" if engine == "L3 Ground Continuity R20.3"
@@ -744,16 +749,22 @@ class MainWindow(QMainWindow):
                 f"  Possible unobserved Ground under returns: {result.mantle_possible_unobserved_cells:,}",
                 "  To inspect the 2.5-D mantle use EXPORT MANTO (LAZ).",
                 (
-                    "  R20.6.2 uses explicit NO_GROUND_OBSERVATION mantle cells as reconstructed Ground."
+                    "  R20.7 uses LOW-SEED TIN + NO_GROUND_OBSERVATION mantle reconstruction."
+                    if engine == "Universal Ground R20.7"
+                    else "  R20.6.2 uses explicit NO_GROUND_OBSERVATION mantle cells as reconstructed Ground."
                     if engine == "Universal Ground R20.6.2"
                     else "  Inferred mantle is never written by measured-only exports."
                 ),
             ))
 
-        if engine == "Universal Ground R20.6.2":
+        if engine in {"Universal Ground R20.7", "Universal Ground R20.6.2"}:
             model = result.model
             lines.extend((
-                "R20.6.2 RECONSTRUCTED GROUND:",
+                (
+                    "R20.7 LOW-SEED TIN + RECONSTRUCTED GROUND:"
+                    if engine == "Universal Ground R20.7"
+                    else "R20.6.2 RECONSTRUCTED GROUND:"
+                ),
                 f"  Reconstructed XY cells: {getattr(model, 'reconstructed_cell_count', 0):,}",
                 f"  Empty/inferred mantle cells: {getattr(model, 'reconstructed_inferred_cell_count', 0):,}",
                 f"  Ground-not-observed under returns: {getattr(model, 'reconstructed_hidden_cell_count', 0):,}",
@@ -861,7 +872,7 @@ class MainWindow(QMainWindow):
         self.export_mdt_button.setEnabled(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.6.2: calcular MDT para pré-visualização...")
+        self._busy(True, "R20.7: calcular MDT para pré-visualização...")
         worker = MDTPreviewWorker(
             self._cloud.path,
             self._ground_result,
@@ -899,7 +910,7 @@ class MainWindow(QMainWindow):
         if self._mdt_preview is None or self._mdt_worker is not None:
             return
         source = self._mdt_preview.source
-        suggested = source.with_name(source.stem + "_MDT_R20_6_2.tif")
+        suggested = source.with_name(source.stem + "_MDT_R20_7.tif")
         filename, _ = QFileDialog.getSaveFileName(
             self, "EXPORTAR MDT aprovado", str(suggested),
             "GeoTIFF (*.tif *.tiff)",
@@ -911,7 +922,7 @@ class MainWindow(QMainWindow):
             output = output.with_suffix(".tif")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._busy(True, "R20.6.2: exportar MDT validado...")
+        self._busy(True, "R20.7: exportar MDT validado...")
         worker = MDTExportWorker(
             source,
             output,
@@ -932,7 +943,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"MDT concluído: {info['mdt']}")
         QMessageBox.information(
             self,
-            "LAS-CAFIISICA — MDT R20.6.2",
+            "LAS-CAFIISICA — MDT R20.7",
             "MDT criado:\n"
             + info["mdt"]
             + "\n\nEstado de observação:\n"
@@ -943,7 +954,7 @@ class MainWindow(QMainWindow):
 
     def _mdt_failed(self, message: str) -> None:
         self.statusBar().showMessage("MDT falhou")
-        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.6.2", message)
+        QMessageBox.critical(self, "LAS-CAFIISICA — MDT R20.7", message)
 
     def _mdt_finished(self) -> None:
         worker = self._mdt_worker
