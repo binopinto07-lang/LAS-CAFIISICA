@@ -295,6 +295,7 @@ def run_universal_ground_r2051(
         progress,
         engine_name="Universal Ground R20.5.1",
         revision_label="R20.5.1",
+        continuity_builder=_r2062_continuity_builder,
     )
 
 
