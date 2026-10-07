@@ -14,6 +14,7 @@ from ..classifiers.l3_mantle_veto import run_l3_mantle_veto
 from ..classifiers.l3_ground_continuity import run_l3_ground_continuity
 from ..classifiers.universal_ground import (
     run_universal_ground,
+    run_universal_ground_r2062,
     run_universal_ground_r2051,
     run_universal_ground_r204,
 )
@@ -96,8 +97,12 @@ class GroundEngineWorker(QThread):
             )
         )
         try:
-            if self.engine_name == "Universal Ground R20.6.2":
+            if self.engine_name == "Universal Ground R20.7":
                 result = run_universal_ground(self.cloud, self.params, callback)
+            elif self.engine_name == "Universal Ground R20.6.2":
+                result = run_universal_ground_r2062(
+                    self.cloud, self.params, callback
+                )
             elif self.engine_name == "Universal Ground R20.5.1":
                 result = run_universal_ground_r2051(
                     self.cloud, self.params, callback
