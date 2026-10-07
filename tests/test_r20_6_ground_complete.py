@@ -113,7 +113,7 @@ def test_complete_model_keeps_measured_model_and_exposes_synthetic_channel():
     assert model.params.chunk_size == 1234
     assert model.synthetic_fill_point_count == 8
     assert model.reconstructed_cell_count == 2
-    assert model.engine_name == "Universal Ground R20.6.2"
+    assert model.engine_name == "Universal Ground R20.7"
     assert list(model.iter_synthetic_fill_xyz())
 
 
