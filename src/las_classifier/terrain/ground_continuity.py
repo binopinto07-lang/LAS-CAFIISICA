@@ -78,6 +78,7 @@ class GroundContinuity:
     expansion_steps: int
     config: ContinuityConfig
     final_veto: object | None = None
+    terrain_guard: object | None = None
 
     @property
     def connected_cell_count(self) -> int:
